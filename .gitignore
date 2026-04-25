@@ -1,0 +1,28 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+*.test
+
+# Go
+/vendor/
+go.work
+go.work.sum
+coverage.out
+coverage.html
+
+# npm
+node_modules/
+npm-debug.log*
+*.tgz
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local
+/scratch/
+*.local.*
