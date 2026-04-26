@@ -16,11 +16,33 @@ func TestRoot_Help(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute --help: %v", err)
 	}
-	if !strings.Contains(buf.String(), "analyze") {
-		t.Fatalf("help missing 'analyze' command:\n%s", buf.String())
+	for _, want := range []string{
+		"analyze",
+		"demo",
+		accuracyDisclosure,
+		"Examples:",
+		"sevro analyze",
+		"--no-color",
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("help missing %q:\n%s", want, buf.String())
+		}
 	}
-	if !strings.Contains(buf.String(), accuracyDisclosure) {
-		t.Fatalf("help missing accuracy disclosure:\n%s", buf.String())
+}
+
+// TestVersion_Output checks the polished version line.
+func TestVersion_Output(t *testing.T) {
+	cmd := newRootCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--version"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute --version: %v", err)
+	}
+	for _, want := range []string{"sevro", "Helm chart cost & security analysis"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("version missing %q:\n%s", want, buf.String())
+		}
 	}
 }
 
@@ -31,20 +53,25 @@ func TestDemo_RunsAndIncludesDisclosure(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"demo"})
+	cmd.SetArgs([]string{"--no-color", "demo"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute demo: %v\n%s", err, buf.String())
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Sevro Sandbox Analysis",
-		"workload: api",
-		"workload: worker",
+		"sevro",
+		"Helm chart cost",
+		"api",
+		"worker",
 		"±40%",
+		"sevro.dev/get",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in demo output:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "\x1b") {
+		t.Errorf("--no-color output should be ANSI-free; got:\n%s", out)
 	}
 }
 
@@ -55,13 +82,15 @@ func TestAnalyze_FixtureFile(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"analyze", "../../testdata/fixtures/basic-chart/values.yaml"})
+	cmd.SetArgs([]string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute analyze: %v\n%s", err, buf.String())
 	}
 	out := buf.String()
-	if !strings.Contains(out, "Findings (2)") {
-		t.Fatalf("expected 2 findings header, got:\n%s", out)
+	for _, want := range []string{"3 workloads", "2 findings", "HIGH", "MED", "$29.20"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in analyze output:\n%s", want, out)
+		}
 	}
 }
 
@@ -85,6 +114,71 @@ func TestAnalyze_JSONShape(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in JSON output:\n%s", want, out)
+		}
+	}
+}
+
+func TestResolveColor_NoColorFlag(t *testing.T) {
+	cmd := newRootCmd()
+	if got := resolveColor(cmd, true); got {
+		t.Error("resolveColor with --no-color should be false")
+	}
+}
+
+func TestResolveColor_NoColorEnv(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	cmd := newRootCmd()
+	if got := resolveColor(cmd, false); got {
+		t.Error("resolveColor with NO_COLOR=1 should be false")
+	}
+}
+
+func TestResolveColor_CLICOLORForceWithoutTTY(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("NO_COLOR", "")
+	cmd := newRootCmd()
+	cmd.SetOut(&bytes.Buffer{}) // not a *os.File so TTY path is false
+	if got := resolveColor(cmd, false); !got {
+		t.Error("CLICOLOR_FORCE=1 should override TTY check")
+	}
+}
+
+func TestResolveColor_NoTTYNoColor(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("NO_COLOR", "")
+	cmd := newRootCmd()
+	cmd.SetOut(&bytes.Buffer{}) // not a TTY
+	if got := resolveColor(cmd, false); got {
+		t.Error("buffer (non-TTY) without forces should disable color")
+	}
+}
+
+func TestAtoi(t *testing.T) {
+	cases := map[string]struct {
+		want int
+		err  bool
+	}{
+		"":     {0, false},
+		"0":    {0, false},
+		"123":  {123, false},
+		"abc":  {0, true},
+		"12x":  {0, true},
+		"99":   {99, false},
+	}
+	for in, tc := range cases {
+		got, err := atoi(in)
+		if tc.err {
+			if err == nil {
+				t.Errorf("atoi(%q): expected error", in)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("atoi(%q): unexpected error: %v", in, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("atoi(%q) = %d, want %d", in, got, tc.want)
 		}
 	}
 }
