@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/lowplane/sevro/internal/render"
@@ -48,7 +49,15 @@ func (s Score) WriteText(w io.Writer, opts render.Options) error {
 
 	if len(s.Penalties) > 0 {
 		fmt.Fprintf(&b, "  %s\n", t.Title.Render("Penalty breakdown"))
-		for det, p := range s.Penalties {
+		// Deterministic order: sort detector IDs alphabetically so
+		// golden tests are stable.
+		ids := make([]string, 0, len(s.Penalties))
+		for det := range s.Penalties {
+			ids = append(ids, det)
+		}
+		sort.Strings(ids)
+		for _, det := range ids {
+			p := s.Penalties[det]
 			fmt.Fprintf(&b, "    %s%s   %s\n",
 				t.Muted.Render(det),
 				strings.Repeat(" ", maxInt(2, 32-len(det))),
