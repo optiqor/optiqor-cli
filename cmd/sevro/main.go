@@ -20,6 +20,7 @@ import (
 	"github.com/lowplane/sevro/internal/render"
 	"github.com/lowplane/sevro/internal/render/style"
 	"github.com/lowplane/sevro/internal/rules"
+	"github.com/lowplane/sevro/internal/share"
 )
 
 // Exit codes — stable contract for CI integration.
@@ -124,11 +125,12 @@ func newAnalyzeCmd() *cobra.Command {
 	var (
 		jsonOut    bool
 		offline    bool
-		share      bool
+		shareFlag  bool
 		roast      bool
 		minSev     string
 		detectors  []string
 		failOn     string // severity threshold that triggers exit code 1
+		outputPath string
 	)
 	cmd := &cobra.Command{
 		Use:   "analyze [chart]",
@@ -175,31 +177,66 @@ inefficiencies and security findings.
 				MinSeverity: rules.Severity(toUpper(effSev)),
 				DetectorIDs: effDetectors,
 			})
-			if err := emitReport(cmd, rep, jsonOut); err != nil {
+			if err := emitReport(cmd, rep, jsonOut, outputPath); err != nil {
 				return err
 			}
+			if shareFlag {
+				emitShareURL(cmd, rep)
+			}
 			_ = offline
-			_ = share
 			_ = roast
 			return checkFailOn(rep, effFailOn)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit machine-readable JSON")
 	cmd.Flags().BoolVar(&offline, "offline", true, "do not perform any network calls (always true in Phase 1)")
-	cmd.Flags().BoolVar(&share, "share", false, "upload sanitized analysis to sevro.dev/r/<hash> (opt-in)")
+	cmd.Flags().BoolVar(&shareFlag, "share", false, "print sevro.dev/r/<hash> for the sanitised analysis (no upload in Phase 1)")
 	cmd.Flags().BoolVar(&roast, "roast", false, "humorous output (findings stay accurate)")
 	cmd.Flags().StringVar(&minSev, "severity", "", "drop findings below this severity (low|med|high)")
 	cmd.Flags().StringArrayVar(&detectors, "detector", nil, "only run findings from these detector IDs (repeatable)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit code 1 when any finding is at this severity or higher (low|med|high)")
+	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "write the rendered output to a file instead of stdout")
 	return cmd
 }
 
-// emitReport renders the report in JSON or styled text.
-func emitReport(cmd *cobra.Command, rep render.Report, jsonOut bool) error {
-	if jsonOut {
-		return render.JSON(cmd.OutOrStdout(), rep)
+// emitReport renders the report in JSON or styled text. When
+// outputPath is non-empty the rendered bytes go to that file instead
+// of stdout (CI use case: `sevro analyze --json --output result.json`).
+func emitReport(cmd *cobra.Command, rep render.Report, jsonOut bool, outputPath string) error {
+	w, closeFn, err := openOutput(cmd, outputPath)
+	if err != nil {
+		return err
 	}
-	return render.Text(cmd.OutOrStdout(), rep, renderOpts(cmd))
+	defer closeFn()
+	if jsonOut {
+		return render.JSON(w, rep)
+	}
+	return render.Text(w, rep, renderOpts(cmd))
+}
+
+// openOutput resolves the destination: stdout when path is empty;
+// otherwise creates / truncates the file. The returned closer is a
+// no-op for stdout so callers can defer it unconditionally.
+func openOutput(cmd *cobra.Command, path string) (io.Writer, func(), error) {
+	if path == "" {
+		return cmd.OutOrStdout(), func() {}, nil
+	}
+	f, err := os.Create(path) //nolint:gosec // user-specified output path
+	if err != nil {
+		return nil, nil, fmt.Errorf("open --output: %w", err)
+	}
+	return f, func() { _ = f.Close() }, nil
+}
+
+// emitShareURL prints `--share` provenance to stderr so it doesn't
+// pollute --json or --output. Returns nil even on share errors;
+// share is best-effort UX, not a blocking failure path.
+func emitShareURL(cmd *cobra.Command, rep any) {
+	url, err := share.URL(rep)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "share URL (Phase-1 stub, viewer ships with sandbox): %s\n", url)
 }
 
 // checkFailOn returns errFindings when any finding meets or exceeds
@@ -418,14 +455,15 @@ func newScoreCmd() *cobra.Command {
 
 func newAuditCmd() *cobra.Command {
 	var (
-		jsonOut bool
-		failOn  string
+		jsonOut    bool
+		failOn     string
+		outputPath string
 	)
 	cmd := &cobra.Command{
 		Use:     "audit [chart]",
 		Short:   "Audit a chart for security findings only",
 		Args:    cobra.MaximumNArgs(1),
-		Example: `  sevro audit ./my-chart\n  sevro audit ./values.yaml --fail-on=high`,
+		Example: "  sevro audit ./my-chart\n  sevro audit ./values.yaml --fail-on=high",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
 			if len(args) == 1 {
@@ -440,7 +478,7 @@ func newAuditCmd() *cobra.Command {
 				return err
 			}
 			rep = analyze.Filter(rep, analyze.FilterOptions{SecurityOnly: true})
-			if err := emitReport(cmd, rep, jsonOut); err != nil {
+			if err := emitReport(cmd, rep, jsonOut, outputPath); err != nil {
 				return err
 			}
 			return checkFailOn(rep, failOn)
@@ -448,6 +486,7 @@ func newAuditCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit machine-readable JSON")
 	cmd.Flags().StringVar(&failOn, "fail-on", "high", "exit code 1 when any finding is at this severity or higher (low|med|high)")
+	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "write the rendered output to a file instead of stdout")
 	return cmd
 }
 
