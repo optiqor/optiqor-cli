@@ -26,3 +26,10 @@ npm-debug.log*
 # Local
 /scratch/
 *.local.*
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
