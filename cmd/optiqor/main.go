@@ -230,7 +230,7 @@ func writeHTMLReport(path string, rep render.Report) error {
 	if err != nil {
 		return fmt.Errorf("open --html: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return htmlrender.Render(f, htmlrender.Data{
 		Source:    rep.Source,
 		Workloads: rep.Workloads,

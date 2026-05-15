@@ -49,7 +49,9 @@ const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent f
 type Mode int
 
 const (
+	// ModeSandbox renders the public sandbox accuracy banner.
 	ModeSandbox Mode = iota
+	// ModeAgent renders the exact-accuracy banner for the paid agent path.
 	ModeAgent
 )
 
