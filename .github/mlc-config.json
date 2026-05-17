@@ -4,7 +4,9 @@
     { "pattern": "^http://127\\.0\\.0\\.1" },
     { "pattern": "^http://0\\.0\\.0\\.0" },
     { "pattern": "^https://optiqor\\.com" },
-    { "pattern": "^https://optiqor\\.dev" }
+    { "pattern": "^https://optiqor\\.dev" },
+    { "pattern": "^https://www\\.npmjs\\.com/package/@optiqor/" },
+    { "pattern": "^https://github\\.com/optiqor/optiqor-cli/discussions" }
   ],
   "timeout": "10s",
   "retryOn429": true,

@@ -1,9 +1,9 @@
 # optiqor-cli — repo-local todo
 
 This file tracks CLI-only work. The org-level roadmap that wires both
-repos and the strategy docs is in [../todo.md](../todo.md); items
-here are scoped to what lands inside this repo's `cmd/`, `internal/`,
-or `pkg/`.
+repos and the strategy docs lives in the Optiqor org monorepo (not
+public); items here are scoped to what lands inside this repo's
+`cmd/`, `internal/`, or `pkg/`.
 
 ## Recently shipped
 

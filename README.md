@@ -87,7 +87,7 @@ sudo mv optiqor /usr/local/bin/
 ```
 
 > [!TIP]
-> All release artifacts are signed with [Cosign](https://docs.sigstore.dev/cosign/overview/). Verification instructions on the [release page](https://github.com/optiqor/optiqor-cli/releases).
+> All release artifacts are signed with [Cosign](https://github.com/sigstore/cosign). Verification instructions on the [release page](https://github.com/optiqor/optiqor-cli/releases).
 
 ### Option 5: Build from source
 

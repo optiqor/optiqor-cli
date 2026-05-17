@@ -1,6 +1,6 @@
 # cli — Claude Conventions
 
-This is the **open-source** Optiqor CLI (`@optiqor/cli`). It must remain independently auditable as Apache-2.0 OSS — that is the entire reason it lives in a separate repo from the proprietary backend. Strategy reference: [../docs/open_source_cli_playbook.md](../docs/open_source_cli_playbook.md).
+This is the **open-source** Optiqor CLI (`@optiqor/cli`). It must remain independently auditable as Apache-2.0 OSS — that is the entire reason it lives in a separate repo from the proprietary backend. Strategy reference: `docs/open_source_cli_playbook.md` in the Optiqor org monorepo (not public).
 
 ## Stack
 
