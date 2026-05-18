@@ -39,8 +39,6 @@ var errFindings = errors.New("optiqor: findings exceed threshold")
 
 var version = "dev"
 
-const accuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
-
 func main() {
 	err := newRootCmd().Execute()
 	switch {
@@ -71,7 +69,7 @@ As a bonus, it also flags obvious security misconfigurations it spots while
 parsing your chart (runAsRoot, :latest tags, missing securityContext, host
 namespaces, etc.). Cost is the headline; security is a side-effect.
 
-` + accuracyDisclosure,
+` + htmlrender.AccuracyDisclosure,
 		Example: `  # Analyze a Helm chart directory
   optiqor analyze ./my-chart
 
@@ -147,7 +145,7 @@ func newAnalyzeCmd() *cobra.Command {
 inefficiencies. Obvious security misconfigurations are flagged as a bonus
 side-effect of parsing — they are not the headline feature.
 
-` + accuracyDisclosure,
+` + htmlrender.AccuracyDisclosure,
 		Example: `  optiqor analyze ./my-chart
   optiqor analyze ./values.yaml --json
   optiqor analyze ./chart --severity=med --fail-on=high

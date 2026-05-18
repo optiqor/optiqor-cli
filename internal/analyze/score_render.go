@@ -11,6 +11,7 @@ import (
 
 	"github.com/optiqor/optiqor-cli/internal/render"
 	"github.com/optiqor/optiqor-cli/internal/render/style"
+	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 )
 
 const scoreDefaultWidth = 78
@@ -132,7 +133,7 @@ func writeScorePenalties(b *strings.Builder, t style.Theme, s Score) {
 
 func writeScoreFooter(b *strings.Builder, t style.Theme, width int) {
 	fmt.Fprintf(b, "%s\n", t.DividerLine(width))
-	fmt.Fprintf(b, "  %s\n", t.Disclosure.Render(render.AccuracyDisclosure))
+	fmt.Fprintf(b, "  %s\n", t.Disclosure.Render(htmlrender.AccuracyDisclosure))
 	fmt.Fprintf(b, "  %s %s\n",
 		t.Muted.Render("Calibration:"),
 		t.Muted.Render("static benchmark distribution; agent install unlocks live percentile vs your fleet."),
@@ -149,7 +150,7 @@ func (s Score) WriteJSON(w io.Writer) error {
 		AccuracyDisclosure string `json:"accuracy_disclosure"`
 		Score              Score  `json:"score_report"`
 	}{
-		AccuracyDisclosure: render.AccuracyDisclosure,
+		AccuracyDisclosure: htmlrender.AccuracyDisclosure,
 		Score:              s,
 	})
 }

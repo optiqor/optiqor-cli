@@ -22,11 +22,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/optiqor/optiqor-cli/internal/render/style"
+	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
-
-// AccuracyDisclosure is the mandatory line every output must contain.
-const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
 // Brand strings used in the header banner.
 const (
@@ -225,7 +223,7 @@ func writeSummary(b *strings.Builder, t style.Theme, r Report, costCount, secCou
 	if secCount > 0 {
 		rows = append(rows, [2]string{
 			"Security",
-			t.Muted.Render(plural(secCount, "finding", "findings")+" — bonus, surfaced while parsing"),
+			t.Muted.Render(plural(secCount, "finding", "findings") + " — bonus, surfaced while parsing"),
 		})
 	}
 
@@ -584,7 +582,7 @@ func writeFooter(b *strings.Builder, t style.Theme, width int, totalCents int64,
 	}
 	// Accuracy disclosure is mandatory and exact (CLAUDE.md hard rule).
 	// Roast can add a quip BELOW it; it never replaces it.
-	fmt.Fprintf(b, "%s%s\n", contentIndent, t.Disclosure.Render(AccuracyDisclosure))
+	fmt.Fprintf(b, "%s%s\n", contentIndent, t.Disclosure.Render(htmlrender.AccuracyDisclosure))
 	linkLabel := t.CallToLink.Render("optiqor.dev/get")
 	fmt.Fprintf(b, "%s%s %s\n", contentIndent,
 		t.Muted.Render("→ install the agent for exact numbers:"),
@@ -613,7 +611,7 @@ func JSON(w io.Writer, r Report) error {
 		MonthlySavingsUSD  float64         `json:"monthly_savings_usd"`
 		AnnualSavingsUSD   float64         `json:"annual_savings_usd"`
 	}{
-		AccuracyDisclosure: AccuracyDisclosure,
+		AccuracyDisclosure: htmlrender.AccuracyDisclosure,
 		Source:             r.Source,
 		Workloads:          r.Workloads,
 		Findings:           r.Findings,

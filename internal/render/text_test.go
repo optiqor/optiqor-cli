@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
@@ -66,7 +67,7 @@ func TestText_PlainAlwaysIncludesAccuracyDisclosure(t *testing.T) {
 		if err := Text(&buf, r, Options{Color: false}); err != nil {
 			t.Fatalf("Text(%s): %v", r.Source, err)
 		}
-		if !strings.Contains(buf.String(), AccuracyDisclosure) {
+		if !strings.Contains(buf.String(), htmlrender.AccuracyDisclosure) {
 			t.Fatalf("Text(%s): missing accuracy disclosure:\n%s", r.Source, buf.String())
 		}
 	}
@@ -81,7 +82,7 @@ func TestText_ColoredAlwaysIncludesAccuracyDisclosure(t *testing.T) {
 		t.Fatal(err)
 	}
 	stripped := stripANSI(buf.String())
-	if !strings.Contains(stripped, AccuracyDisclosure) {
+	if !strings.Contains(stripped, htmlrender.AccuracyDisclosure) {
 		t.Fatalf("colored output missing disclosure (stripped):\n%s", stripped)
 	}
 }
@@ -193,7 +194,7 @@ func TestJSON_IncludesDisclosureAndShape(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v\nbody=%s", err, buf.String())
 	}
-	if got.AccuracyDisclosure != AccuracyDisclosure {
+	if got.AccuracyDisclosure != htmlrender.AccuracyDisclosure {
 		t.Errorf("disclosure missing or wrong: %q", got.AccuracyDisclosure)
 	}
 	if got.MonthlySavingsUSD != 1.0 {

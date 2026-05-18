@@ -8,6 +8,7 @@ import (
 
 	"github.com/optiqor/optiqor-cli/internal/render"
 	"github.com/optiqor/optiqor-cli/internal/render/style"
+	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 	"github.com/optiqor/optiqor-cli/pkg/parser"
 )
 
@@ -53,7 +54,7 @@ func (r DiffReport) WriteText(w io.Writer, opts render.Options) error {
 			t.Muted.Render("(±40%)"),
 		)
 	}
-	fmt.Fprintf(&b, "  %s\n", t.Disclosure.Render(render.AccuracyDisclosure))
+	fmt.Fprintf(&b, "  %s\n", t.Disclosure.Render(htmlrender.AccuracyDisclosure))
 
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -70,7 +71,7 @@ func (r DiffReport) WriteJSON(w io.Writer) error {
 		Entries            []DiffEntry `json:"entries"`
 		MonthlyUSDDelta    float64     `json:"monthly_usd_delta"`
 	}{
-		AccuracyDisclosure: render.AccuracyDisclosure,
+		AccuracyDisclosure: htmlrender.AccuracyDisclosure,
 		A:                  r.A,
 		B:                  r.B,
 		Entries:            r.Entries,

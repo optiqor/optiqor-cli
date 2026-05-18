@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 )
 
 // TestRoot_Help just exercises the top-level cobra wiring; ensures we
@@ -19,7 +21,7 @@ func TestRoot_Help(t *testing.T) {
 	for _, want := range []string{
 		"analyze",
 		"demo",
-		accuracyDisclosure,
+		htmlrender.AccuracyDisclosure,
 		"Examples:",
 		"optiqor analyze",
 		"--no-color",
