@@ -28,6 +28,7 @@ func (cpuRequestEqualsLimit) Category() Category      { return CategoryCost }
 func (memoryRequestEqualsLimit) Category() Category   { return CategoryCost }
 func (tinyCPURequest) Category() Category             { return CategoryCost }
 func (tinyMemoryRequest) Category() Category          { return CategoryCost }
+func (idleWorkload) Category() Category               { return CategoryCost }
 
 // ---- Security --------------------------------------------------------
 
