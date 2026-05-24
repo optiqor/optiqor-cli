@@ -4,26 +4,22 @@ info:
   version: "1.0.0"
   summary: Public + tenant-scoped HTTP surface of the Optiqor backend.
   description: |
-    This spec mirrors the route registrations in `cmd/api/routes.go` of
-    the proprietary [optiqor/optiqor](https://github.com/optiqor/optiqor)
-    backend. The CLI repo owns this file because the spec is part of the
-    public OSS surface — the CLI's TS client generator, third-party
-    integrations, and the dashboard all consume it.
+    Mirrors the route registrations in `cmd/api/routes.go` of the
+    proprietary backend. Lives in the OSS CLI repo because the spec is
+    part of the public surface (TS client generation, third-party
+    integrations, dashboard).
 
-    Stability: routes prefixed `/v1/` are stable; breaking changes ship
-    under `/v2/` with a documented deprecation window. Routes without a
-    version prefix (`/healthz`, `/r/<hash>`, `/v/<id>`, `/webhooks/*`,
-    `/oauth/*`) are operationally-stable but follow a separate
+    Stability: `/v1/*` routes are stable; breaking changes ship under
+    `/v2/*` with a deprecation window. Unversioned routes (`/healthz`,
+    `/r/<hash>`, `/v/<id>`, `/webhooks/*`, `/oauth/*`) follow a separate
     deprecation contract per CLAUDE.md.
 
-    Authentication: Phase 2 reads tenant from `X-Optiqor-Tenant` header
-    for tenant-scoped routes. Phase 5 swaps to a JWT extractor (the
-    `bearerAuth` / `sessionCookie` schemes below) without changing the
+    Auth: Phase 2 reads tenant from `X-Optiqor-Tenant`; Phase 5 swaps
+    in the bearerAuth / sessionCookie schemes below without changing
     route shapes.
 
-    CI gate: `scripts/check-openapi-parity.sh` in the backend repo
-    asserts every path defined here is also registered in the Go
-    handlers, and vice versa.
+    CI gate `scripts/check-openapi-parity.sh` in the backend repo
+    enforces spec ↔ handler parity in both directions.
   contact:
     name: Optiqor Engineering
     url: https://optiqor.dev
