@@ -18,7 +18,6 @@ worker:
 
 const bOnly = `
 api:
-  # halved CPU + memory request
   resources:
     requests: {cpu: "500m", memory: "512Mi"}
     limits:   {cpu: "500m", memory: "512Mi"}
@@ -27,7 +26,6 @@ worker:
     requests: {cpu: "500m", memory: "1Gi"}
     limits:   {cpu: "500m", memory: "1Gi"}
 cache:
-  # net-new workload
   resources:
     requests: {cpu: "100m", memory: "256Mi"}
     limits:   {cpu: "200m", memory: "512Mi"}
@@ -75,8 +73,12 @@ func TestDiff_DetectsAddedRemovedAndChanged(t *testing.T) {
 	}
 }
 
-func TestDiff_RemovedWorkload(t *testing.T) {
-	rep, err := Diff(strings.NewReader(aOnly), strings.NewReader(`api: {resources: {requests: {cpu: 1, memory: 1Gi}, limits: {cpu: 1, memory: 1Gi}}}`), "a", "b")
+func TestDiff_RemovedWorkload_FlagsRemoval(t *testing.T) {
+	rep, err := Diff(
+		strings.NewReader(aOnly),
+		strings.NewReader(`api: {resources: {requests: {cpu: 1, memory: 1Gi}, limits: {cpu: 1, memory: 1Gi}}}`),
+		"a", "b",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +93,7 @@ func TestDiff_RemovedWorkload(t *testing.T) {
 	}
 }
 
-func TestDiff_TotalSavingsNegative(t *testing.T) {
+func TestDiff_TotalSavings_NetNegativeWhenShrinking(t *testing.T) {
 	rep, err := Diff(strings.NewReader(aOnly), strings.NewReader(`api: {resources: {requests: {cpu: 500m, memory: 512Mi}, limits: {cpu: 500m, memory: 512Mi}}}
 worker: {resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: 500m, memory: 1Gi}}}`), "a", "b")
 	if err != nil {
@@ -102,7 +104,7 @@ worker: {resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: 500m, mem
 	}
 }
 
-func TestDiff_StableEntryOrder(t *testing.T) {
+func TestDiff_Entries_SortedByName(t *testing.T) {
 	rep, err := Diff(strings.NewReader(aOnly), strings.NewReader(bOnly), "a", "b")
 	if err != nil {
 		t.Fatal(err)

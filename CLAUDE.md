@@ -46,8 +46,45 @@ These are not preferences. They are conditions for the OSS funnel to work.
 
 ## Testing
 
-- Golden tests in `testdata/fixtures/` for each detector and each renderer.
+- Table-driven by default. One row per scenario, `t.Run(tc.name, ...)` so failures name the row.
+- Naming: `TestFunctionName_Scenario_ExpectedBehavior`. Read aloud, it forms a sentence.
+- Stdlib only — no testify, no gomock. `errors.Is` / `errors.As` for error checks; `bytes.Equal` for bytes; golden files for multi-line / whitespace-sensitive output.
+- Race detector always: `go test -race -count=1 ./...` is the CI bar.
+- Inject time + randomness — `time.Date(...)`, `bytes.NewReader`, never `time.Now()` / `rand.Intn` in code under test.
+- Helpers call `t.Helper()` on the first line.
+- Golden tests in `testdata/golden/` for every renderer output. The mandatory ±40% accuracy disclosure is asserted byte-identical across modes. Regenerate with `UPDATE_GOLDEN=1 go test ./...` and eyeball the diff before committing.
 - `go test ./...` is the only test command. No separate integration suite — the CLI is pure functions over Helm input.
+
+See `.claude/skills/test/SKILL.md` for the full procedure: templates, anti-patterns, coverage targets, and references to clean examples in the repo.
+
+## Comments
+
+Comments explain WHY, never what. Decoration is debt; every comment is a thing a future engineer must keep in sync with the code. When in doubt, delete. Re-add only when a reader would miss a non-obvious constraint, trade-off, ADR reference, security/performance rationale, or invariant.
+
+The CLI is **Apache-2.0 OSS**, so `pkg/` is the public surface that external Go programs import. Lean slightly more conservative there: one-line godoc on every exported symbol is appropriate when it documents a contract beyond the name (`// Run executes all detectors against the workloads and returns findings in detector-declaration order` is a real contract; `// Run runs the detectors.` is not).
+
+**Banned:**
+
+- Markdown headers (`#`, `##`, `###`) inside `//` comments.
+- `Note:`, `Important:`, `Caution:`, `Warning:` labels. If it's important, the code structure should make the rule unmissable.
+- Em-dash-heavy narrative essays in package or function docstrings. One terse sentence beats five lines of glue.
+- Decorative section dividers: `// ─── Helpers ───`, `// ====== validators ======`. Use blank lines.
+- Multi-paragraph package docstrings narrating "Layout philosophy:", "Implementation notes:", "Design constraints:". Compress to one or two terse sentences.
+- Bullet-listed enumerations of struct fields or function returns — the type tags already enumerate them.
+- Restating the signature (`// Foo returns a Foo.`) or the next line of code.
+- "Helper function to...", "Utility for...", "This function..." preambles.
+- Emojis. None, anywhere.
+- TODOs without a name and issue: `// TODO(@shivam, #42): ...` is fine; `// TODO: do later` is not.
+
+**Always keep:**
+
+- The CLI's hard-rule pins: no LLM in CLI, no telemetry by default, ±40% accuracy disclosure is mandatory in every renderer output. Comments that pin these stay verbatim.
+- Detector references to CIS / NSA hardening guides — those anchors are load-bearing for security findings.
+- Cross-file references to other packages, ADRs, or upstream specs.
+
+**How to audit a comment**: ask *"if I delete this, what does the next reader fail to understand?"* If the answer is "nothing — the name + signature + types already say it", delete. If the answer names a specific constraint, trade-off, or hard-rule pin, keep but compress.
+
+**Reference commits**: the 2026-05-24 cleanup (`feba8e0` openapi header, `9f817cd` cli sweep) stripped ~400 lines of comment cruft from this repo. Read those diffs for the tone applied at scale; new code should land at that compression level from the start.
 
 ## Don't
 

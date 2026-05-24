@@ -20,6 +20,7 @@ import (
 	"time"
 )
 
+// BaseURL is the public share-page prefix.
 const BaseURL = "https://optiqor.dev/r/"
 
 // HashLen of 12 hex chars (48 bits) is collision-safe at Phase 1
@@ -72,6 +73,7 @@ func Hash(report any) (string, error) {
 	return hex.EncodeToString(sum[:])[:HashLen], nil
 }
 
+// URL is the canonical share URL: BaseURL + Hash(report).
 func URL(report any) (string, error) {
 	h, err := Hash(report)
 	if err != nil {
@@ -101,8 +103,7 @@ const UploadEndpoint = "https://sandbox.optiqor.dev/api/v1/share"
 // uploadTimeout keeps tight — the CLI is interactive.
 const uploadTimeout = 5 * time.Second
 
-// UploadResult: Hash + URL are always populated; Posted reports
-// whether the HTTP POST returned 2xx.
+// UploadResult always populates Hash + URL; Posted reports HTTP 2xx.
 type UploadResult struct {
 	Hash   string
 	URL    string

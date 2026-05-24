@@ -59,6 +59,7 @@ func (r DiffReport) WriteText(w io.Writer, opts render.Options) error {
 	return err
 }
 
+// WriteJSON emits the report with the mandatory accuracy disclosure.
 func (r DiffReport) WriteJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

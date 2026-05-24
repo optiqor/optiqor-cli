@@ -28,6 +28,7 @@ type Config struct {
 	NoColor     bool     `yaml:"no_color,omitempty"`
 }
 
+// ConfigName is the default filename Load looks for in the cwd.
 const ConfigName = ".optiqor.yaml"
 
 // Load returns the zero Config when no file is present (users opt in
@@ -60,6 +61,7 @@ func readFile(path string) (Config, error) {
 	return Decode(f)
 }
 
+// Decode parses YAML config bytes and validates the result.
 func Decode(r io.Reader) (Config, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -78,6 +80,7 @@ func Decode(r io.Reader) (Config, error) {
 	return c, nil
 }
 
+// Validate rejects unknown severity / fail-on values.
 func (c Config) Validate() error {
 	for _, key := range []struct {
 		name, value string

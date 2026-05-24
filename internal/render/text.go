@@ -21,6 +21,7 @@ import (
 // (hard rule per CLAUDE.md — never soften, never make dismissible).
 const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
+// Brand strings surfaced in the header banner.
 const (
 	BrandName    = "optiqor"
 	BrandTagline = "Helm chart cost optimization · security as a bonus"
@@ -71,6 +72,8 @@ func (r Report) MonthlySavingsUSDCents() int64 {
 	return sum
 }
 
+// Text writes the terminal-friendly report. Always includes the
+// AccuracyDisclosure footer (hard rule per CLAUDE.md).
 func Text(w io.Writer, r Report, opts Options) error {
 	t := style.NewTheme(opts.Color)
 	width := opts.Width

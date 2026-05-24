@@ -172,6 +172,7 @@ func (t Theme) Hyperlink(label, url string) string {
 	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, label)
 }
 
+// DividerLine renders a width-many-rune box-drawing divider.
 func (t Theme) DividerLine(width int) string {
 	if width <= 0 {
 		width = 64
@@ -222,6 +223,7 @@ func (t Theme) SectionRule(label string, width int, accent lipgloss.Style) strin
 	return rendered + accent.Render(repeat("━", remaining))
 }
 
+// SeverityBadge renders a fixed-width coloured chip for the severity.
 func (t Theme) SeverityBadge(sev string) string {
 	switch sev {
 	case "HIGH":
@@ -235,6 +237,7 @@ func (t Theme) SeverityBadge(sev string) string {
 	}
 }
 
+// ConfidenceDots renders the high/medium/low band as three glyphs.
 func (t Theme) ConfidenceDots(conf string) string {
 	switch conf {
 	case "high":

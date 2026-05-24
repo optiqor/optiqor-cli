@@ -24,6 +24,7 @@ type DiffEntry struct {
 	MonthlyUSDCentsDelta int64 // sandbox estimate; ±40% disclosure applies
 }
 
+// DiffReport is the wire shape Diff returns.
 type DiffReport struct {
 	A       string      `json:"a"`
 	B       string      `json:"b"`
@@ -90,6 +91,7 @@ func Diff(a, b io.Reader, aLabel, bLabel string) (DiffReport, error) {
 	return DiffReport{A: aLabel, B: bLabel, Entries: entries}, nil
 }
 
+// DiffPaths opens both files and runs Diff.
 func DiffPaths(a, b string) (DiffReport, error) {
 	fa, err := openValues(a)
 	if err != nil {

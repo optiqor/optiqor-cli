@@ -9,38 +9,33 @@ import (
 	"testing"
 )
 
-// -update regenerates the golden files. Use only after a deliberate
-// UX change.
+// -update regenerates the golden files after a deliberate UX change.
 var update = flag.Bool("update", false, "update golden files")
 
 const goldenDir = "../../testdata/golden"
 
-type goldenCase struct {
-	name string
-	args []string
-}
-
-var goldenCases = []goldenCase{
-	{name: "demo_plain", args: []string{"--no-color", "demo"}},
-	{name: "demo_json", args: []string{"demo", "--json"}},
-	{name: "analyze_fixture_plain", args: []string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml"}},
-	{name: "analyze_fixture_severity_high", args: []string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml", "--severity", "high"}},
-	{name: "analyze_fixture_detector_filter", args: []string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml", "--detector", "image-pinned-latest"}},
-	{name: "score_fixture_plain", args: []string{"--no-color", "score", "../../testdata/fixtures/basic-chart/values.yaml"}},
-	{name: "score_fixture_json", args: []string{"score", "../../testdata/fixtures/basic-chart/values.yaml", "--json"}},
-	{name: "audit_fixture_plain", args: []string{"--no-color", "audit", "../../testdata/fixtures/basic-chart/values.yaml", "--fail-on", ""}},
-}
-
-func TestGolden(t *testing.T) {
+func TestCmd_Golden_Stable(t *testing.T) {
 	if err := os.MkdirAll(goldenDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	// Pin width or the dev's $COLUMNS leaks into goldens and diverges
-	// from CI (no TTY → fallback 80).
+	// from CI (no TTY -> fallback 80).
 	t.Setenv("COLUMNS", "80")
 
-	for _, tc := range goldenCases {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "demo_plain", args: []string{"--no-color", "demo"}},
+		{name: "demo_json", args: []string{"demo", "--json"}},
+		{name: "analyze_fixture_plain", args: []string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml"}},
+		{name: "analyze_fixture_severity_high", args: []string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml", "--severity", "high"}},
+		{name: "analyze_fixture_detector_filter", args: []string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml", "--detector", "image-pinned-latest"}},
+		{name: "score_fixture_plain", args: []string{"--no-color", "score", "../../testdata/fixtures/basic-chart/values.yaml"}},
+		{name: "score_fixture_json", args: []string{"score", "../../testdata/fixtures/basic-chart/values.yaml", "--json"}},
+		{name: "audit_fixture_plain", args: []string{"--no-color", "audit", "../../testdata/fixtures/basic-chart/values.yaml", "--fail-on", ""}},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := newRootCmd()
 			var buf bytes.Buffer
