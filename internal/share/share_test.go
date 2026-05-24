@@ -14,45 +14,50 @@ type sample struct {
 	Findings  []any  `json:"findings"`
 }
 
-func TestHash_Stable(t *testing.T) {
-	a := sample{Source: "/tmp/x", Workloads: 3, Findings: []any{
-		map[string]any{"DetectorID": "cpu", "Severity": "MED"},
-	}}
-	h1, err := Hash(a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h2, err := Hash(a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if h1 != h2 {
-		t.Errorf("hash unstable: %q vs %q", h1, h2)
-	}
-	if len(h1) != HashLen {
-		t.Errorf("hash len = %d, want %d", len(h1), HashLen)
-	}
-}
-
-func TestHash_IgnoresSourcePath(t *testing.T) {
-	// Source-path differences must not change the hash — that's the
-	// point of sanitisation.
-	a := sample{Source: "/home/alice/chart", Workloads: 1}
-	b := sample{Source: "/home/bob/chart", Workloads: 1}
-	ha, _ := Hash(a)
-	hb, _ := Hash(b)
-	if ha != hb {
-		t.Errorf("source path leaked into hash: %q vs %q", ha, hb)
-	}
-}
-
-func TestHash_WorkloadsAffectsHash(t *testing.T) {
-	a := sample{Workloads: 3}
-	b := sample{Workloads: 5}
-	ha, _ := Hash(a)
-	hb, _ := Hash(b)
-	if ha == hb {
-		t.Errorf("workload count should change the hash")
+func TestHash(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		a, b sample
+		// equal=true asserts Hash(a) == Hash(b); false asserts they differ.
+		equal bool
+	}{
+		{
+			name:  "stable across calls",
+			a:     sample{Source: "/tmp/x", Workloads: 3, Findings: []any{map[string]any{"DetectorID": "cpu", "Severity": "MED"}}},
+			b:     sample{Source: "/tmp/x", Workloads: 3, Findings: []any{map[string]any{"DetectorID": "cpu", "Severity": "MED"}}},
+			equal: true,
+		},
+		{
+			// Source-path differences must not change the hash — that's
+			// the point of sanitisation.
+			name:  "ignores source path",
+			a:     sample{Source: "/home/alice/chart", Workloads: 1},
+			b:     sample{Source: "/home/bob/chart", Workloads: 1},
+			equal: true,
+		},
+		{
+			name:  "workload count affects hash",
+			a:     sample{Workloads: 3},
+			b:     sample{Workloads: 5},
+			equal: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ha, err := Hash(tc.a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hb, err := Hash(tc.b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ha) != HashLen {
+				t.Errorf("hash len = %d, want %d", len(ha), HashLen)
+			}
+			if (ha == hb) != tc.equal {
+				t.Errorf("equal=%v: ha=%q hb=%q", tc.equal, ha, hb)
+			}
+		})
 	}
 }
 
@@ -93,96 +98,121 @@ func TestSanitise_TruncatesLongDetail(t *testing.T) {
 	}
 }
 
-func TestUpload_PostsSanitisedJSON(t *testing.T) {
-	var (
-		gotMethod  string
-		gotHash    string
-		gotContent string
-		gotBody    []byte
-	)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotHash = r.Header.Get("X-Optiqor-Hash")
-		gotContent = r.Header.Get("Content-Type")
-		gotBody, _ = io.ReadAll(r.Body)
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer srv.Close()
+func TestUpload(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		handler   http.HandlerFunc
+		closeSrv  bool // close the server before Upload — simulates network error
+		input     sample
+		wantPost  bool
+		wantErrIn string // substring expected in res.Error when wantPost=false
+		check     func(t *testing.T, res UploadResult, captured map[string]string, body []byte)
+	}{
+		{
+			name: "posts sanitised json",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusAccepted)
+			},
+			input:    sample{Source: "/tmp/x", Workloads: 2},
+			wantPost: true,
+			check: func(t *testing.T, res UploadResult, captured map[string]string, body []byte) {
+				t.Helper()
+				if !IsHash(res.Hash) {
+					t.Errorf("Hash invalid: %q", res.Hash)
+				}
+				if !strings.HasPrefix(res.URL, BaseURL) {
+					t.Errorf("URL = %q", res.URL)
+				}
+				if captured["method"] != http.MethodPost {
+					t.Errorf("method = %q", captured["method"])
+				}
+				if captured["content-type"] != "application/json" {
+					t.Errorf("content-type = %q", captured["content-type"])
+				}
+				if captured["x-optiqor-hash"] != res.Hash {
+					t.Errorf("X-Optiqor-Hash = %q, want %q", captured["x-optiqor-hash"], res.Hash)
+				}
+				// Sanitisation contract: source path must not appear in
+				// the wire body.
+				if strings.Contains(string(body), "/tmp/x") {
+					t.Errorf("source path leaked into upload body: %s", body)
+				}
+			},
+		},
+		{
+			name: "non-2xx becomes error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			input:     sample{Workloads: 1},
+			wantPost:  false,
+			wantErrIn: "500",
+		},
+		{
+			// Closed server → connection-refused style error. Hash/URL
+			// must still be populated so callers can show the local hash.
+			name:      "network error graceful",
+			handler:   func(http.ResponseWriter, *http.Request) {},
+			closeSrv:  true,
+			input:     sample{Workloads: 1},
+			wantPost:  false,
+			wantErrIn: "",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			captured := map[string]string{}
+			var body []byte
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				captured["method"] = r.Method
+				captured["content-type"] = r.Header.Get("Content-Type")
+				captured["x-optiqor-hash"] = r.Header.Get("X-Optiqor-Hash")
+				body, _ = io.ReadAll(r.Body)
+				tc.handler(w, r)
+			}))
+			if tc.closeSrv {
+				srv.Close()
+			} else {
+				defer srv.Close()
+			}
 
-	rep := sample{Source: "/tmp/x", Workloads: 2}
-	res := Upload(rep, srv.URL)
+			res := Upload(tc.input, srv.URL)
 
-	if !res.Posted {
-		t.Fatalf("Posted = false, error = %q", res.Error)
-	}
-	if !IsHash(res.Hash) {
-		t.Errorf("Hash invalid: %q", res.Hash)
-	}
-	if !strings.HasPrefix(res.URL, BaseURL) {
-		t.Errorf("URL = %q", res.URL)
-	}
-	if gotMethod != http.MethodPost {
-		t.Errorf("method = %q", gotMethod)
-	}
-	if gotContent != "application/json" {
-		t.Errorf("content-type = %q", gotContent)
-	}
-	if gotHash != res.Hash {
-		t.Errorf("X-Optiqor-Hash = %q, want %q", gotHash, res.Hash)
-	}
-	// Body must NOT contain the source path (PII sanitisation).
-	if strings.Contains(string(gotBody), "/tmp/x") {
-		t.Errorf("source path leaked into upload body: %s", gotBody)
-	}
-}
-
-func TestUpload_RejectsNon2xxAsError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	res := Upload(sample{Workloads: 1}, srv.URL)
-	if res.Posted {
-		t.Fatal("non-2xx must be reported as not-posted")
-	}
-	if !strings.Contains(res.Error, "500") {
-		t.Errorf("Error = %q, want it to mention status 500", res.Error)
-	}
-	if !IsHash(res.Hash) || res.URL == "" {
-		t.Errorf("hash/url should still be populated on failure: %+v", res)
-	}
-}
-
-func TestUpload_NetworkErrorGraceful(t *testing.T) {
-	// Closed server → connection-refused style error
-	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
-	srv.Close()
-
-	res := Upload(sample{Workloads: 1}, srv.URL)
-	if res.Posted {
-		t.Fatal("upload to closed server should not be Posted")
-	}
-	if res.Error == "" {
-		t.Error("Error should describe the failure")
-	}
-	if !IsHash(res.Hash) {
-		t.Errorf("Hash should be populated even on network failure: %q", res.Hash)
+			if res.Posted != tc.wantPost {
+				t.Fatalf("Posted = %v want %v; Error=%q", res.Posted, tc.wantPost, res.Error)
+			}
+			if !IsHash(res.Hash) {
+				t.Errorf("Hash should be populated even on failure: %q", res.Hash)
+			}
+			if !tc.wantPost && tc.wantErrIn != "" && !strings.Contains(res.Error, tc.wantErrIn) {
+				t.Errorf("Error %q does not contain %q", res.Error, tc.wantErrIn)
+			}
+			if !tc.wantPost && tc.wantErrIn == "" && res.Error == "" {
+				t.Error("Error should describe the failure")
+			}
+			if tc.check != nil {
+				tc.check(t, res, captured, body)
+			}
+		})
 	}
 }
 
 func TestIsHash(t *testing.T) {
-	cases := map[string]bool{
-		"":              false,
-		"abc":           false,
-		"abcdef012345":  true,
-		"ABCDEF012345":  true,
-		"abcdef01234g":  false,
-		"abcdef0123456": false, // too long
-	}
-	for in, want := range cases {
-		if got := IsHash(in); got != want {
-			t.Errorf("IsHash(%q) = %v, want %v", in, got, want)
-		}
+	for _, tc := range []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"empty", "", false},
+		{"too short", "abc", false},
+		{"lowercase hex", "abcdef012345", true},
+		{"uppercase hex", "ABCDEF012345", true},
+		{"non-hex char", "abcdef01234g", false},
+		{"too long", "abcdef0123456", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsHash(tc.in); got != tc.want {
+				t.Errorf("IsHash(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
 	}
 }
