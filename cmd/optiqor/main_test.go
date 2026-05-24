@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// TestRoot_Help just exercises the top-level cobra wiring; ensures we
-// can build and serialise the help text without panicking.
 func TestRoot_Help(t *testing.T) {
 	cmd := newRootCmd()
 	var buf bytes.Buffer
@@ -30,7 +28,6 @@ func TestRoot_Help(t *testing.T) {
 	}
 }
 
-// TestVersion_Output checks the polished version line.
 func TestVersion_Output(t *testing.T) {
 	cmd := newRootCmd()
 	var buf bytes.Buffer
@@ -47,7 +44,8 @@ func TestVersion_Output(t *testing.T) {
 }
 
 // TestDemo_RunsAndIncludesDisclosure exercises the full demo path
-// (embedded fixture → parser → rules → render).
+// (embedded fixture → parser → rules → render) and checks the
+// accuracy disclosure shows up.
 func TestDemo_RunsAndIncludesDisclosure(t *testing.T) {
 	cmd := newRootCmd()
 	var buf bytes.Buffer
@@ -75,10 +73,8 @@ func TestDemo_RunsAndIncludesDisclosure(t *testing.T) {
 	}
 }
 
-// TestAnalyze_FixtureFile exercises the analyze command against the
-// versioned testdata fixture. Asserts the well-known severities and
-// detectors fire; lets the count grow naturally as the detector
-// library expands.
+// TestAnalyze_FixtureFile asserts well-known severities and
+// detectors fire; lets count grow naturally as the library expands.
 func TestAnalyze_FixtureFile(t *testing.T) {
 	cmd := newRootCmd()
 	var buf bytes.Buffer
@@ -89,9 +85,8 @@ func TestAnalyze_FixtureFile(t *testing.T) {
 		t.Fatalf("execute analyze: %v\n%s", err, buf.String())
 	}
 	out := buf.String()
-	// Severity badges + workload names appear on the per-finding line;
-	// the renderer prints them as bare identifiers rather than as
-	// "workload: <name>".
+	// Renderer emits severity badges and bare workload identifiers
+	// (no "workload: <name>" prefix).
 	for _, want := range []string{
 		"15 workloads",
 		"HIGH",
@@ -111,8 +106,6 @@ func TestAnalyze_FixtureFile(t *testing.T) {
 	}
 }
 
-// TestAnalyze_JSONShape exercises --json on a fixture and validates
-// the schema is intact.
 func TestAnalyze_JSONShape(t *testing.T) {
 	cmd := newRootCmd()
 	var buf bytes.Buffer

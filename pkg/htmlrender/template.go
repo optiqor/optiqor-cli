@@ -1,12 +1,8 @@
 package htmlrender
 
 // documentTemplate is the single self-contained HTML document. Inline
-// CSS only — the file must open from `file://` and over HTTP with
-// identical bytes. Keep the markup boring; the visual interest comes
-// from the brand palette and the typography hierarchy, not from
-// clever JavaScript.
-//
-// Brand mirror: optiqor-cli/brand/tokens.json. Update both in lockstep.
+// CSS only — must render identically from file:// and over HTTP.
+// Brand mirror: optiqor-cli/brand/tokens.json — update in lockstep.
 const documentTemplate = `<!doctype html>
 <html lang="en">
 <head>

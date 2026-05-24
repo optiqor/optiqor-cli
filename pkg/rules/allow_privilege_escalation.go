@@ -14,7 +14,7 @@ func (allowPrivilegeEscalation) ID() string   { return "allow-privilege-escalati
 func (allowPrivilegeEscalation) Name() string { return "Privilege escalation allowed" }
 
 func (allowPrivilegeEscalation) Run(w parser.Workload) []Finding {
-	// Explicit true → HIGH.
+	// Explicit true → HIGH; unset (defaults to true at runtime) → MED.
 	if w.Security.AllowPrivilegeEscalation != nil && *w.Security.AllowPrivilegeEscalation {
 		return []Finding{{
 			DetectorID: "allow-privilege-escalation",
@@ -25,7 +25,6 @@ func (allowPrivilegeEscalation) Run(w parser.Workload) []Finding {
 			Confidence: ConfidenceHigh,
 		}}
 	}
-	// Unset defaults to true at runtime → MED.
 	if w.Security.AllowPrivilegeEscalation == nil {
 		return []Finding{{
 			DetectorID: "allow-privilege-escalation",

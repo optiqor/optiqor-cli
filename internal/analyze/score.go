@@ -2,18 +2,11 @@ package analyze
 
 import "github.com/optiqor/optiqor-cli/pkg/rules"
 
-// Score is the result of `optiqor score [chart]` — a 0-100 efficiency
-// score derived from the severities of detector findings, plus the
-// qualitative confidence band, a letter grade, and a percentile rank
-// against the baked-in calibration distribution.
-//
-// The numerical value is "100 minus the per-finding penalty cap";
-// numerical Confidence Scores arrive in Year 2 once we have enough
-// merged-PR outcomes to calibrate. For now Confidence is qualitative.
-//
-// Grade turns the abstract score into a screenshot-friendly social
-// signal ("B+ · better than 64% of charts"); it is fully derived
-// from Value and the static distribution in [GradeFor].
+// Score is the result of `optiqor score [chart]`: 0–100 efficiency
+// computed as "100 minus per-finding penalty (capped)", plus a
+// qualitative confidence band and a Grade (letter + percentile).
+// Numerical confidence arrives in Year 2 once we have merged-PR
+// outcomes to calibrate against.
 type Score struct {
 	Workloads int              `json:"workloads_analyzed"`
 	Source    string           `json:"source"`
@@ -24,10 +17,8 @@ type Score struct {
 	Findings  []rules.Finding  `json:"findings"`
 }
 
-// Penalty weights per severity. High-severity findings drag the score
-// down faster than low-severity ones; the cap (100) is the maximum
-// penalty any single workload can incur, so a chart with one HIGH
-// finding never scores below ~50 from that finding alone.
+// Penalty weights per severity; capped so one HIGH finding alone
+// can't push a chart below ~50.
 const (
 	penaltyHigh = 25
 	penaltyMed  = 10
@@ -76,9 +67,8 @@ func penaltyFor(s rules.Severity) int {
 	}
 }
 
-// bandFor maps a numerical score into a qualitative confidence band.
-// Stable mapping; Year-2 numerical scores derive their confidence
-// differently (calibrated against measured outcomes).
+// bandFor: stable Year-1 mapping; Year-2 confidence will be
+// calibrated against measured outcomes instead.
 func bandFor(score int) rules.Confidence {
 	switch {
 	case score >= 85:

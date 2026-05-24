@@ -16,7 +16,8 @@ func (runAsRoot) ID() string   { return "run-as-root" }
 func (runAsRoot) Name() string { return "Container runs as root" }
 
 func (runAsRoot) Run(w parser.Workload) []Finding {
-	// Explicit false ⇒ fire HIGH.
+	// Explicit false → HIGH; unset → MED (image USER could be non-zero,
+	// can't tell from values.yaml alone).
 	if w.Security.RunAsNonRoot != nil && !*w.Security.RunAsNonRoot {
 		return []Finding{{
 			DetectorID: "run-as-root",
@@ -27,9 +28,6 @@ func (runAsRoot) Run(w parser.Workload) []Finding {
 			Confidence: ConfidenceHigh,
 		}}
 	}
-	// Unset ⇒ fire MED (probably running as root, but the image USER
-	// directive could be non-zero; we cannot tell from values.yaml
-	// alone). Surface as informational.
 	if w.Security.RunAsNonRoot == nil {
 		return []Finding{{
 			DetectorID: "run-as-root",

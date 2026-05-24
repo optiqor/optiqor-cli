@@ -15,19 +15,8 @@ import (
 
 const scoreDefaultWidth = 78
 
-// WriteText renders the score panel as styled text. The Grade row is
-// the headline — letter + percentile against the calibration set —
-// because that is what platform engineers screenshot. The numeric
-// score still appears so CI gates and analytics can pin against it.
-//
-// Layout:
-//
-//	── header ──
-//	  Source / Workloads
-//	  Grade        B+   better than 64% of 100 benchmark charts
-//	  Score        78 / 100   ●●○ medium confidence
-//	  Penalty breakdown …
-//	── footer (accuracy disclosure + calibration note) ──
+// WriteText renders the score panel as styled text. Grade leads
+// (screenshot-friendly); numeric score follows for CI gates.
 func (s Score) WriteText(w io.Writer, opts render.Options) error {
 	t := style.NewTheme(opts.Color)
 	width := opts.Width
@@ -94,10 +83,8 @@ func writeScoreNumericRow(b *strings.Builder, t style.Theme, s Score) {
 	)
 }
 
-// gradeBadge picks a badge style for the letter grade so it visually
-// matches the severity palette: red for F/D, amber for C, green for
-// B/A. Reuses the existing severity badges so the brand palette stays
-// consistent.
+// gradeBadge reuses the severity palette: red for F/D, amber for C,
+// green for B/A — keeps the brand palette consistent.
 func gradeBadge(t style.Theme, value int) lipgloss.Style {
 	switch {
 	case value < 60:
@@ -139,9 +126,8 @@ func writeScoreFooter(b *strings.Builder, t style.Theme, width int) {
 	)
 }
 
-// WriteJSON renders the score as machine-readable JSON. Includes the
-// full Grade so consumers can drive their own dashboards without
-// reimplementing the percentile lookup.
+// WriteJSON includes the full Grade so consumers can drive their own
+// dashboards without reimplementing the percentile lookup.
 func (s Score) WriteJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

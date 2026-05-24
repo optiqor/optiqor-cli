@@ -19,7 +19,7 @@ func stripANSI(s string) string {
 			i++
 			continue
 		}
-		// CSI: ESC [ ... m | ESC [ ... <letter>
+		// CSI: ESC [ ... <letter>
 		if i+1 < len(s) && s[i+1] == '[' {
 			j := i + 2
 			for j < len(s) && (s[j] < '@' || s[j] > '~') {

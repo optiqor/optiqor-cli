@@ -1,15 +1,7 @@
 // Package render formats analysis results as styled text or JSON.
 //
-// **Every renderer must include the ±40% accuracy disclosure.** Removing
-// it is a hard rule violation — see ../../CLAUDE.md. The disclosure is
-// what makes the CLI a trustworthy funnel: we never overpromise.
-//
-// Layout philosophy: cost is the headline product, security findings
-// are a bonus side-effect of parsing. Renderers therefore split
-// findings by [rules.Category] and present them as two distinct
-// sections — cost first with full detail, security after as compact
-// one-liners — so a user scanning the output sees the value prop in
-// the first screenful.
+// Every renderer must include the ±40% accuracy disclosure — hard rule
+// per ../../CLAUDE.md.
 package render
 
 import (
@@ -25,18 +17,16 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
-// AccuracyDisclosure is the mandatory line every output must contain.
+// AccuracyDisclosure is the mandatory line every output must contain
+// (hard rule per CLAUDE.md — never soften, never make dismissible).
 const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
-// Brand strings used in the header banner.
 const (
 	BrandName    = "optiqor"
 	BrandTagline = "Helm chart cost optimization · security as a bonus"
 	GetURL       = "https://optiqor.dev/get"
 )
 
-// Layout constants. Centralised so callers don't sprinkle magic
-// numbers and so visual tweaks happen in one place.
 const (
 	defaultWidth     = 78
 	contentIndent    = "  "
@@ -46,42 +36,28 @@ const (
 	bonusSectionName = "Security findings"
 	costSectionName  = "Cost optimizations"
 
-	// cardMinInner is the smallest interior width we'll render a
-	// boxed cost finding at. Below this the layout breaks down; we
-	// fall back to a flat (un-boxed) rendering on very narrow
-	// terminals.
+	// cardMinInner: below this the boxed layout breaks down, so we
+	// fall back to a flat rendering on very narrow terminals.
 	cardMinInner = 50
 
-	// signalBarWidth is the rune count of the request/limit bar
-	// inside a card. Wide enough to be expressive, narrow enough to
-	// leave room for the value labels.
 	signalBarWidth = 24
 )
 
 // Report is the renderer-facing view of an analysis run.
 type Report struct {
-	Source    string          `json:"source"` // path or label of the input
+	Source    string          `json:"source"`
 	Workloads int             `json:"workloads_analyzed"`
 	Findings  []rules.Finding `json:"findings"`
 }
 
-// Options controls how a Report is rendered. Callers (cmd/optiqor/main.go)
-// detect TTY + NO_COLOR + --no-color and set Color accordingly.
+// Options controls how a Report is rendered.
 type Options struct {
-	Color bool // false → plain ASCII, no ANSI; true → branded styled output
-	Width int  // terminal width; 0 → defaultWidth
+	Color bool
+	Width int // 0 → defaultWidth
 
-	// Roast swaps the brand tagline and footer quip for the playful
-	// `--roast` variants. Findings themselves are roasted upstream
-	// (see internal/roast); the renderer only reads the strings here
-	// so it stays unaware of where the roast titles came from.
-	Roast bool
-
-	// RoastTagline / RoastFooter override the default tagline and
-	// footer when Roast is true. Empty values fall back to the
-	// non-roast copy. Callers that don't need to override leave them
-	// empty; tests use them to assert the wiring without depending
-	// on the internal/roast package.
+	// Roast strings are supplied by the caller rather than imported
+	// from internal/roast so this package stays leaf-level.
+	Roast        bool
 	RoastTagline string
 	RoastFooter  string
 }
@@ -95,11 +71,6 @@ func (r Report) MonthlySavingsUSDCents() int64 {
 	return sum
 }
 
-// Text writes the styled human-readable report. The output is split
-// into a branded header, an executive summary, a "Cost optimizations"
-// section (full detail), a "Security findings (bonus)" section
-// (compact one-liners), and a footer with the accuracy disclosure
-// and agent CTA.
 func Text(w io.Writer, r Report, opts Options) error {
 	t := style.NewTheme(opts.Color)
 	width := opts.Width
@@ -133,15 +104,9 @@ func Text(w io.Writer, r Report, opts Options) error {
 }
 
 // sortCostForDisplay reorders cost findings so the biggest dollar
-// impact leads. The engine's stable sort (workload → severity) is
-// excellent for diffs and audit, but it buries high-savings findings
-// behind alphabetically-earlier workloads. Display order:
-//
-//  1. findings with monthly savings, highest USD first
-//  2. then findings with no dollar estimate, by severity desc
-//  3. ties broken by workload, then detector ID — both stable.
-//
-// Returns a new slice; the caller's input is not mutated.
+// impact leads. The engine's stable workload→severity sort is right
+// for diffs/audit but buries high-savings behind alphabetically
+// earlier workloads. Returns a new slice; input is not mutated.
 func sortCostForDisplay(in []rules.Finding) []rules.Finding {
 	out := make([]rules.Finding, len(in))
 	copy(out, in)
@@ -176,11 +141,10 @@ func severityRank(s rules.Severity) int {
 	return 0
 }
 
-// splitByCategory partitions findings while preserving the order
-// established by rules.Run (workload → severity → detector ID).
-// Findings without a Category fall back to the cost section so they
-// remain visible — a defensive default for any custom detector that
-// forgets to declare one.
+// splitByCategory partitions findings preserving rules.Run order
+// (workload → severity → detector ID). Cost is the headline section
+// and security is bonus; uncategorised findings fall through to cost
+// so a detector that forgets to declare Category stays visible.
 func splitByCategory(findings []rules.Finding) (cost, security []rules.Finding) {
 	cost = make([]rules.Finding, 0, len(findings))
 	security = make([]rules.Finding, 0, len(findings))
@@ -225,7 +189,7 @@ func writeSummary(b *strings.Builder, t style.Theme, r Report, costCount, secCou
 	if secCount > 0 {
 		rows = append(rows, [2]string{
 			"Security",
-			t.Muted.Render(plural(secCount, "finding", "findings")+" — bonus, surfaced while parsing"),
+			t.Muted.Render(plural(secCount, "finding", "findings") + " — bonus, surfaced while parsing"),
 		})
 	}
 
@@ -269,11 +233,8 @@ func writeCostSection(b *strings.Builder, t style.Theme, width int, findings []r
 	b.WriteString("\n")
 }
 
-// writeCostFinding renders a single cost-section finding as a boxed
-// "card" with a header (severity · workload · savings), an optional
-// signal bar (request/limit ratio + commentary), the body text, and
-// a confidence footer. On very narrow terminals (<cardMinInner inner
-// width) it gracefully degrades to a flat layout.
+// writeCostFinding renders a finding as a boxed card; degrades to a
+// flat layout below cardMinInner inner width.
 func writeCostFinding(b *strings.Builder, t style.Theme, f rules.Finding, width int) {
 	// Card body cells = innerWidth + 4 — see writeCardHeaderRule for
 	// the breakdown ("│ " on the left, " │" on the right).
@@ -321,8 +282,8 @@ func writeCostFinding(b *strings.Builder, t style.Theme, f rules.Finding, width 
 	)
 }
 
-// writeCostFindingFlat is the fall-back layout used when the terminal
-// is too narrow to render a card cleanly. Identical content, no box.
+// writeCostFindingFlat: narrow-terminal fallback, identical content
+// with no box.
 func writeCostFindingFlat(b *strings.Builder, t style.Theme, f rules.Finding, width int) {
 	badge := t.SeverityBadge(string(f.Severity))
 	wl := t.Workload.Render(f.Workload)
@@ -349,23 +310,14 @@ func writeCostFindingFlat(b *strings.Builder, t style.Theme, f rules.Finding, wi
 	)
 }
 
-// writeCardHeaderRule writes the top of a card with embedded labels:
-//
-//	┌─ HIGH · api ─────────────────── save ~$29.20/mo ─┐
-//
-// The severity word inside the rule is colored by the severity. The
-// rule is sized to match the body lines emitted by [cardLine] so left
-// and right edges align: those lines occupy
-// `"│ " + innerWidth runes + " │"`, which is `innerWidth + 4` cells.
-// We mirror that here.
+// writeCardHeaderRule writes the top of a card with embedded labels.
+// Sized to match cardLine's "│ " + innerWidth + " │" so the edges
+// align — keep in sync if cardLine's framing changes.
 func writeCardHeaderRule(b *strings.Builder, t style.Theme, sev rules.Severity, left, right string, innerWidth int) {
 	leftRunes := []rune(left)
 	rightRunes := []rune(right)
-	// Card body cells = innerWidth + 4 ("│ " + content + " │").
-	// The corners ("┌", "┐") consume 2 of those; the lead-in dash
-	// ("┌─") and the matching trailing dash ("─┐") consume 2 more.
-	// What's left is what the labels + gap may use.
-	usable := innerWidth // = (innerWidth+4) - 2 corners - 2 lead/trail dashes
+	// (innerWidth+4) cells - 2 corners - 2 lead/trail dashes = innerWidth.
+	usable := innerWidth
 	if len(leftRunes)+len(rightRunes) > usable {
 		maxLeft := usable - len(rightRunes)
 		if maxLeft < 4 {
@@ -392,9 +344,8 @@ func writeCardHeaderRule(b *strings.Builder, t style.Theme, sev rules.Severity, 
 	)
 }
 
-// stylizeSeverityWord re-renders the leading severity token in the
-// card header with the matching badge color, leaving the rest of the
-// label (workload name) in plain card-border tone.
+// stylizeSeverityWord recolours just the leading severity token in
+// the card header label; the workload name keeps the border tone.
 func stylizeSeverityWord(t style.Theme, sev rules.Severity, label string) string {
 	parts := strings.SplitN(label, " · ", 2)
 	if len(parts) != 2 {
@@ -411,28 +362,21 @@ func stylizeSeverityWord(t style.Theme, sev rules.Severity, label string) string
 	case rules.SeverityLow:
 		sevStyle = t.SevLow
 	}
-	// Use a foreground-only re-render here — we don't want the
-	// background-coloured badge style inside a header rule, just the
-	// matching foreground tone. lipgloss styles are value types, so
-	// `.Background(...)` returns a new style; the original badge in
-	// the Theme is unaffected.
+	// Drop the badge background so we get just the foreground tone
+	// inside a header rule. lipgloss styles are value types so the
+	// Theme's badge is unaffected.
 	return sevStyle.Background(noBackground()).Render(sevTok) +
 		t.CardBorder.Render(rest)
 }
 
-// noBackground returns a sentinel "no background" so the badge style
-// can be reused as a foreground-only accent inside the card header.
-// Keeping this inside one helper means the rest of the renderer never
-// pokes at lipgloss internals.
 func noBackground() lipgloss.TerminalColor { return lipgloss.NoColor{} }
 
-// cardLine writes a single body line of a card, padded to innerWidth
-// runes between the side rules.
+// cardLine writes one card body row padded to innerWidth runes
+// between the side rules.
 func cardLine(b *strings.Builder, t style.Theme, innerWidth int, content string) {
 	visible := visibleRuneCount(content)
 	if visible > innerWidth {
-		// Should not happen — callers wrap first — but if it does,
-		// truncate visibly so the column alignment stays intact.
+		// Callers wrap first; defensive truncate keeps column alignment.
 		content = truncate(content, innerWidth)
 		visible = innerWidth
 	}
@@ -446,13 +390,8 @@ func cardLine(b *strings.Builder, t style.Theme, innerWidth int, content string)
 	)
 }
 
-// formatSignalLine renders a Signal as a one-liner sized to fit
-// inside a card body row:
-//
-//	CPU  request 200m ████████░░░░░░░░░░░░░ 1   10x burst
-//
-// Numbers and labels are width-aware so cards with different
-// magnitudes line up vertically when stacked.
+// formatSignalLine renders a Signal as a one-liner sized to fit a
+// card body row. Width-aware columns so stacked cards align.
 func formatSignalLine(t style.Theme, s rules.Signal) string {
 	bar := t.SignalBar(s.Have, s.Want, signalBarWidth)
 	label := s.Label
@@ -472,8 +411,7 @@ func formatSignalLine(t style.Theme, s rules.Signal) string {
 	)
 }
 
-// padRight returns s padded with spaces to width runes (no truncation
-// — short callers use width-aware columns elsewhere).
+// padRight pads s to width runes; never truncates.
 func padRight(s string, width int) string {
 	r := []rune(s)
 	if len(r) >= width {
@@ -482,11 +420,8 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", width-len(r))
 }
 
-// visibleRuneCount counts terminal cells of s ignoring ANSI/OSC
-// escape sequences. Counts in runes (not bytes) so multi-byte
-// glyphs — the box-drawing characters, the bar blocks, and the
-// confidence dots — are sized correctly. Assumes one cell per rune
-// (no wide-CJK in our copy); good enough for card padding.
+// visibleRuneCount counts terminal cells in s, skipping ANSI/OSC
+// escapes. One cell per rune (no wide-CJK in our copy).
 func visibleRuneCount(s string) int {
 	n := 0
 	r := []rune(s)
@@ -544,7 +479,7 @@ func writeSecuritySection(b *strings.Builder, t style.Theme, width int, findings
 			maxWorkload = n
 		}
 	}
-	if maxWorkload > 24 { // keep the column reasonable on narrow terminals
+	if maxWorkload > 24 {
 		maxWorkload = 24
 	}
 
@@ -583,7 +518,7 @@ func writeFooter(b *strings.Builder, t style.Theme, width int, totalCents int64,
 		)
 	}
 	// Accuracy disclosure is mandatory and exact (CLAUDE.md hard rule).
-	// Roast can add a quip BELOW it; it never replaces it.
+	// Roast adds a quip BELOW; it never replaces.
 	fmt.Fprintf(b, "%s%s\n", contentIndent, t.Disclosure.Render(AccuracyDisclosure))
 	linkLabel := t.CallToLink.Render("optiqor.dev/get")
 	fmt.Fprintf(b, "%s%s %s\n", contentIndent,
@@ -595,10 +530,9 @@ func writeFooter(b *strings.Builder, t style.Theme, width int, totalCents int64,
 	}
 }
 
-// JSON writes the report as machine-readable JSON. Always disclosure-
-// gated. Never colored — JSON output is for piping. The schema groups
-// findings by category so consumers don't have to replicate the
-// renderer's split.
+// JSON writes the report as machine-readable JSON. Always includes
+// the accuracy disclosure; never coloured. Findings are grouped by
+// category so consumers don't have to replicate the split.
 func JSON(w io.Writer, r Report) error {
 	cost, security := splitByCategory(r.Findings)
 	enc := json.NewEncoder(w)
@@ -640,8 +574,8 @@ func plural(n int, singular, pluralForm string) string {
 	return fmt.Sprintf("%d %s", n, pluralForm)
 }
 
-// wrap breaks s into lines no wider than width runes. Naïve word wrap;
-// good enough for finding details which are sentences, not paragraphs.
+// wrap breaks s into lines no wider than width runes. Naive word
+// wrap; finding details are sentences, not paragraphs.
 func wrap(s string, width int) []string {
 	if width <= 0 || len([]rune(s)) <= width {
 		if s == "" {
@@ -672,9 +606,7 @@ func wrap(s string, width int) []string {
 	return lines
 }
 
-// truncate clamps s to at most width runes, suffixing "…" when it had
-// to cut. Width must be >= 1; callers pass column widths so this is
-// trivially satisfied in practice.
+// truncate clamps s to at most width runes, suffixing "…" on cut.
 func truncate(s string, width int) string {
 	if width <= 0 {
 		return ""

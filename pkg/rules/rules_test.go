@@ -7,7 +7,6 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/parser"
 )
 
-// q is a helper to make tests terse.
 func cpuQ(v int64) parser.Quantity { return parser.Quantity{Value: v, Set: true, Original: "x"} }
 func memQ(v int64) parser.Quantity { return parser.Quantity{Value: v, Set: true, Original: "x"} }
 
@@ -105,7 +104,6 @@ func TestRun_StableOrder(t *testing.T) {
 	if len(got) < 2 {
 		t.Fatalf("expected ≥2 findings, got %d: %+v", len(got), got)
 	}
-	// alpha's findings should come before zeta's
 	if got[0].Workload != "alpha" {
 		t.Errorf("first workload = %q, want alpha", got[0].Workload)
 	}

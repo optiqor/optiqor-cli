@@ -9,36 +9,33 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Workload is the normalised view of one resource-bearing unit found in a
-// Helm values file. It is intentionally cloud-agnostic and decoupled from
-// the Kubernetes API: the same shape supports `Deployment`, `StatefulSet`,
-// `CronJob`, etc.
+// Workload is the normalised view of one resource-bearing unit found in
+// a Helm values file. Intentionally cloud-agnostic and decoupled from
+// the Kubernetes API: the same shape supports Deployment, StatefulSet,
+// CronJob, etc.
 type Workload struct {
 	Name     string
 	Kind     string
 	Requests ResourceList
 	Limits   ResourceList
 	Image    ImageRef
-	// Replicas mirrors the chart's `replicas` value (or `replicaCount`,
-	// the most common alternative key). Zero means "unset"; the
-	// detector library treats unset as "the chart's default", which is
-	// not necessarily 1.
+	// Replicas mirrors the chart's `replicas` or `replicaCount` value.
+	// Zero means "unset"; detectors treat unset as the chart's default
+	// (not necessarily 1).
 	Replicas int
-	// HasHPA reports whether an autoscaler block was declared on this
-	// workload. Charts vary in how they expose HPA — `autoscaling.enabled`
-	// is the most common — so we conservatively report "true" when any
-	// `autoscaling` mapping is present and not explicitly disabled.
+	// HasHPA reports whether an autoscaler block was declared. A bare
+	// `autoscaling` mapping without `enabled: false` counts as enabled.
 	HasHPA bool
 	// Security captures the security-context flags the security
-	// detectors care about. Nil pointers mean "not declared in the
-	// chart"; the detector decides whether unset is safe.
+	// detectors care about. Nil pointers mean "not declared"; detectors
+	// decide whether unset is safe.
 	Security SecurityContext
 }
 
-// SecurityContext is the subset of pod / container `securityContext`
+// SecurityContext is the subset of pod / container securityContext
 // fields Optiqor inspects. Nil pointers preserve "not declared" — a
-// workload that has `runAsNonRoot: false` is materially different from
-// one that omits the field entirely.
+// workload with runAsNonRoot=false is materially different from one
+// that omits the field.
 type SecurityContext struct {
 	RunAsNonRoot             *bool
 	RunAsUser                *int64
@@ -65,15 +62,15 @@ type ResourceList struct {
 }
 
 // ImageRef captures the container image declared on a workload. Helm
-// charts use two common patterns:
+// charts use two patterns:
 //
 //	image: nginx:1.4.2                      -- single string
 //	image:
 //	  repository: nginx                     -- map with keys
 //	  tag: "1.4.2"
 //
-// We accept both. Tag == "" indicates a missing/implicit tag, which
-// Kubernetes treats as `:latest`.
+// Both are accepted. Tag == "" indicates a missing/implicit tag, which
+// Kubernetes treats as :latest.
 type ImageRef struct {
 	Repository string
 	Tag        string
@@ -96,9 +93,8 @@ func (i ImageRef) String() string {
 // `resources` key with `requests` and/or `limits`.
 //
 // Phase 1 supports the common pattern where chart authors expose a
-// `<workload>.resources` block per service. It does not (yet) render
-// templates or evaluate functions; sub-chart and template support land
-// in Phase 2.
+// `<workload>.resources` block per service; sub-chart and template
+// rendering land in Phase 2.
 func ParseValues(r io.Reader) ([]Workload, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -121,8 +117,6 @@ func ParseValues(r io.Reader) ([]Workload, error) {
 	return workloads, nil
 }
 
-// walk descends the YAML tree, emitting a Workload whenever it sees a
-// `resources` map under any named key.
 func walk(n *yaml.Node, path string, out *[]Workload) {
 	if n.Kind != yaml.MappingNode {
 		return
@@ -134,8 +128,8 @@ func walk(n *yaml.Node, path string, out *[]Workload) {
 		}
 		childPath := joinPath(path, k.Value)
 
-		// Treat any mapping with a `resources.requests` or
-		// `resources.limits` child as a workload.
+		// Treat any mapping with a resources.requests or resources.limits
+		// child as a workload.
 		if v.Kind == yaml.MappingNode {
 			if res := findChild(v, "resources"); res != nil && res.Kind == yaml.MappingNode {
 				wl := Workload{Name: childPath, Kind: "Deployment"}
@@ -185,8 +179,8 @@ func readResourceList(n *yaml.Node) ResourceList {
 	return rl
 }
 
-// readImage handles both Helm patterns: a scalar `image: repo:tag`
-// or a mapping `image: {repository: ..., tag: ...}`.
+// readImage handles both Helm patterns: scalar `image: repo:tag` or
+// mapping `image: {repository: ..., tag: ...}`.
 func readImage(n *yaml.Node) ImageRef {
 	if n == nil {
 		return ImageRef{}
@@ -197,8 +191,8 @@ func readImage(n *yaml.Node) ImageRef {
 		if s == "" {
 			return ImageRef{}
 		}
-		// Find rightmost ':' that isn't part of a port (we ignore ports
-		// since we just care about tag presence).
+		// Rightmost ':' splits repo from tag; we don't care about ports
+		// here since this is only used for tag presence.
 		repo, tag := splitImage(s)
 		return ImageRef{Repository: repo, Tag: tag, Set: true}
 	case yaml.MappingNode:
@@ -222,8 +216,8 @@ func readImage(n *yaml.Node) ImageRef {
 	return ImageRef{}
 }
 
-// splitImage parses "repo:tag" → ("repo", "tag"). When no tag is
-// present, returns (s, "").
+// splitImage parses "repo:tag" → ("repo", "tag"); returns (s, "") when
+// no tag is present.
 func splitImage(s string) (repo, tag string) {
 	idx := -1
 	for i := 0; i < len(s); i++ {
@@ -277,8 +271,8 @@ func readReplicas(n *yaml.Node) int {
 }
 
 // readHasHPA returns true when `autoscaling.enabled` is set or the
-// `hpa` mapping is present and not disabled. A bare `autoscaling`
-// block without `enabled: false` counts as enabled.
+// `hpa` mapping is present and not disabled. A bare `autoscaling` block
+// without `enabled: false` counts as enabled.
 func readHasHPA(n *yaml.Node) bool {
 	for _, key := range []string{"autoscaling", "hpa", "horizontalPodAutoscaler"} {
 		c := findChild(n, key)
@@ -382,8 +376,6 @@ func applySecFields(ctx *yaml.Node, out *SecurityContext) {
 	}
 }
 
-// readStringList returns the scalar entries of a YAML sequence,
-// trimming nils and non-scalar entries. Returns nil for nil/non-sequence input.
 func readStringList(n *yaml.Node) []string {
 	if n == nil || n.Kind != yaml.SequenceNode {
 		return nil
@@ -397,8 +389,6 @@ func readStringList(n *yaml.Node) []string {
 	return out
 }
 
-// parseInt64 parses YAML integer scalars; tolerates "0", "1000", "65532", etc.
-// Returns (value, true) on success.
 func parseInt64(s string) (int64, bool) {
 	if s == "" {
 		return 0, false

@@ -1,10 +1,6 @@
-// Package style centralises the Optiqor CLI's visual language: colors,
-// badges, dividers, and section formatters. Renderers compose these
-// styles; they never reach for raw ANSI codes.
-//
-// All styles auto-degrade based on terminal capability: when output is
-// not a TTY, when NO_COLOR is set, or when the user passes --no-color,
-// every Style here renders as its plain-text equivalent.
+// Package style centralises the CLI's visual language. Styles
+// auto-degrade to plain text when colour is off (non-TTY, NO_COLOR,
+// or --no-color).
 package style
 
 import (
@@ -16,52 +12,43 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// BrandGlyph is the ASCII stand-in for the optiqor logomark — a
-// circular Q rendered at terminal scale. Using a single glyph keeps the
-// header readable on every emulator (we don't depend on Nerd Fonts or
-// Unicode powerline glyphs, which still render as boxes on stock CI).
+// BrandGlyph is a single-rune stand-in for the optiqor logomark.
+// Avoids Nerd Font / powerline glyphs that render as boxes on stock CI.
 const BrandGlyph = "◐"
 
-// Theme bundles the entire palette + reusable styles. Construct one
-// per render invocation via NewTheme so colour-vs-plain is a single
-// decision, not threaded through every helper.
+// Theme bundles the palette + reusable styles. Construct one per
+// render via NewTheme so colour-vs-plain is decided once.
 type Theme struct {
 	UseColor bool
 
-	// Brand
 	Brand        lipgloss.Style
 	BrandMark    lipgloss.Style
 	Tagline      lipgloss.Style
 	HeaderBorder lipgloss.Style
 
-	// Boxed-finding card + signal-bar palette
 	CardBorder  lipgloss.Style
 	BarFilled   lipgloss.Style
 	BarEmpty    lipgloss.Style
-	BarOverflow lipgloss.Style // for ratios > 1 (limit < request, etc.)
+	BarOverflow lipgloss.Style // ratios > 1 (limit < request, etc.)
 
-	// Sections
-	SectionPrimary lipgloss.Style // headline section (Cost optimizations)
-	SectionBonus   lipgloss.Style // bonus section (Security)
-	SectionSubtle  lipgloss.Style // light explanatory line under a section
+	SectionPrimary lipgloss.Style
+	SectionBonus   lipgloss.Style
+	SectionSubtle  lipgloss.Style
 
-	// Severity badges
 	SevHigh lipgloss.Style
 	SevMed  lipgloss.Style
 	SevLow  lipgloss.Style
 	SevInfo lipgloss.Style
 
-	// Confidence
 	ConfHigh lipgloss.Style
 	ConfMed  lipgloss.Style
 	ConfLow  lipgloss.Style
 
-	// Output elements
 	Workload   lipgloss.Style
 	Title      lipgloss.Style
 	Detail     lipgloss.Style
 	Savings    lipgloss.Style
-	BigSavings lipgloss.Style // hero number in the executive summary
+	BigSavings lipgloss.Style
 	NoSavings  lipgloss.Style
 	Muted      lipgloss.Style
 	Divider    lipgloss.Style
@@ -70,27 +57,18 @@ type Theme struct {
 	OK         lipgloss.Style
 }
 
-// NewTheme builds a theme. If useColor is false, every style falls back
-// to plain text and bold/foreground attributes are no-ops.
-//
-// When useColor is true, the theme uses its own renderer with the color
-// profile pinned to TrueColor so output is consistent regardless of
-// what TTY detection says — the CLI's outer layer already gated on
-// TTY/NO_COLOR/--no-color before deciding to call NewTheme(true).
+// NewTheme builds a theme. When useColor is true we pin TrueColor on
+// our own renderer so pipe-redirected output still emits ANSI — the
+// CLI's outer layer already decided "should I color?".
 func NewTheme(useColor bool) Theme {
 	if !useColor {
 		return plainTheme()
 	}
 
-	// Use our own renderer so tests and pipe-redirected output still
-	// emit ANSI when the caller explicitly asked for color. The CLI's
-	// outer layer is the source of truth for "should I color?".
 	r := lipgloss.NewRenderer(io.Discard)
 	r.SetColorProfile(termenv.TrueColor)
 
-	// Adaptive colors: pick a value that reads well on both dark and
-	// light backgrounds. Dark variants are tuned for the most common
-	// terminal default (dark).
+	// Adaptive colors: dark variants tuned for the default-dark terminal.
 	brand := lipgloss.AdaptiveColor{Light: "#5C2EE5", Dark: "#A78BFA"}
 	red := lipgloss.AdaptiveColor{Light: "#C92A2A", Dark: "#FF6B6B"}
 	amber := lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#F59E0B"}
@@ -115,10 +93,10 @@ func NewTheme(useColor bool) Theme {
 		Tagline:      r.NewStyle().Foreground(subtle).Italic(true),
 		HeaderBorder: r.NewStyle().Foreground(border),
 
-		CardBorder:   r.NewStyle().Foreground(border),
-		BarFilled:    r.NewStyle().Foreground(green),
-		BarEmpty:     r.NewStyle().Foreground(border),
-		BarOverflow:  r.NewStyle().Foreground(red),
+		CardBorder:  r.NewStyle().Foreground(border),
+		BarFilled:   r.NewStyle().Foreground(green),
+		BarEmpty:    r.NewStyle().Foreground(border),
+		BarOverflow: r.NewStyle().Foreground(red),
 
 		SectionPrimary: r.NewStyle().Foreground(brand).Bold(true),
 		SectionBonus:   r.NewStyle().Foreground(amber).Bold(true),
@@ -142,9 +120,8 @@ func NewTheme(useColor bool) Theme {
 		Muted:      r.NewStyle().Foreground(subtle),
 		Divider:    r.NewStyle().Foreground(border),
 		Disclosure: r.NewStyle().Foreground(amber),
-		// The hyperlink already renders as clickable in modern terminals
-		// (OSC 8); doubling that with `Underline(true)` makes lipgloss
-		// emit per-character styling that confuses some terminals.
+		// OSC 8 already renders as clickable; adding Underline(true)
+		// makes lipgloss emit per-char styling that breaks some terms.
 		CallToLink: r.NewStyle().Foreground(brand).Bold(true),
 		OK:         r.NewStyle().Foreground(green).Bold(true),
 	}
@@ -186,9 +163,8 @@ func plainTheme() Theme {
 	}
 }
 
-// Hyperlink wraps url with an OSC 8 hyperlink escape so modern
-// terminals (iTerm2, kitty, WezTerm, Ghostty, VSCode) render it as a
-// clickable link. Falls back to plain text when colours are off.
+// Hyperlink wraps url in an OSC 8 escape (clickable in iTerm2,
+// kitty, WezTerm, Ghostty, VSCode). Plain text when colour is off.
 func (t Theme) Hyperlink(label, url string) string {
 	if !t.UseColor {
 		return fmt.Sprintf("%s (%s)", label, url)
@@ -196,7 +172,6 @@ func (t Theme) Hyperlink(label, url string) string {
 	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, label)
 }
 
-// DividerLine returns a horizontal rule the given width.
 func (t Theme) DividerLine(width int) string {
 	if width <= 0 {
 		width = 64
@@ -204,24 +179,14 @@ func (t Theme) DividerLine(width int) string {
 	return t.Divider.Render(repeat("─", width))
 }
 
-// SignalBar renders a horizontal ratio bar of the form
-//
-//	████████████░░░░░░░░  (have/want = 0.6)
-//
-// width is the total cell count; have and want are in the same unit
-// and need not be normalized — the bar shows have/want as a fraction
-// of width. When have > want (over-saturated) the overflow tail is
-// drawn in BarOverflow so it visually screams.
-//
-// Returns a fixed-rune-width string regardless of color setting; the
-// caller is responsible for any leading/trailing labels.
+// SignalBar renders a have/want ratio bar. Over-saturated (>1) fills
+// in BarOverflow so the eye catches it; the magnitude is left to the
+// caller's note. Returns a fixed-rune-width string.
 func (t Theme) SignalBar(have, want float64, width int) string {
 	if width <= 0 {
 		width = 20
 	}
 	if want <= 0 {
-		// Degenerate: render an empty bar. Renderers should avoid
-		// calling this when want is zero, but we tolerate it.
 		return t.BarEmpty.Render(repeat("░", width))
 	}
 	ratio := have / want
@@ -238,20 +203,11 @@ func (t Theme) SignalBar(have, want float64, width int) string {
 			t.BarEmpty.Render(repeat("░", width-filled))
 	}
 
-	// Over-saturated: fill the whole bar in overflow tone so the eye
-	// catches it. We don't try to encode the magnitude — the Note
-	// (e.g. "10x burst") carries that.
 	return t.BarOverflow.Render(repeat("█", width))
 }
 
-// SectionRule renders a labelled section divider using heavy hyphens
-// so it visually outranks the regular dividers around the header and
-// footer. Renders identically with or without color.
-//
-//	━━ <label> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//
-// padLeft/padRight let callers indent the rule to match surrounding
-// content. accent picks the colour applied to the label and the rule.
+// SectionRule renders a labelled divider in heavy hyphens so it
+// outranks header/footer dividers. accent colours both label and rule.
 func (t Theme) SectionRule(label string, width int, accent lipgloss.Style) string {
 	if width <= 0 {
 		width = 64
@@ -266,8 +222,6 @@ func (t Theme) SectionRule(label string, width int, accent lipgloss.Style) strin
 	return rendered + accent.Render(repeat("━", remaining))
 }
 
-// SeverityBadge picks the right badge style for a severity string and
-// renders the literal label.
 func (t Theme) SeverityBadge(sev string) string {
 	switch sev {
 	case "HIGH":
@@ -281,7 +235,6 @@ func (t Theme) SeverityBadge(sev string) string {
 	}
 }
 
-// ConfidenceDots returns a fixed-width visual confidence indicator.
 func (t Theme) ConfidenceDots(conf string) string {
 	switch conf {
 	case "high":
@@ -295,9 +248,7 @@ func (t Theme) ConfidenceDots(conf string) string {
 	}
 }
 
-// ConfidenceGlyph is a compact dot-only confidence indicator (no
-// trailing word), used by the bonus-section one-liners where vertical
-// density matters more than self-description.
+// ConfidenceGlyph is the dot-only variant for dense one-liners.
 func (t Theme) ConfidenceGlyph(conf string) string {
 	switch conf {
 	case "high":
@@ -311,8 +262,7 @@ func (t Theme) ConfidenceGlyph(conf string) string {
 	}
 }
 
-// IsTTY reports whether the given file is connected to a terminal.
-// Centralised here so callers don't import isatty everywhere.
+// IsTTY centralises the isatty import.
 func IsTTY(f *os.File) bool {
 	return isTTY(f)
 }

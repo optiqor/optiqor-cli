@@ -9,14 +9,10 @@ import (
 	"testing"
 )
 
-// -update regenerates the golden files from current output. Use
-// sparingly: only after a deliberate UX change. The test diffs against
-// the recorded output otherwise.
+// -update regenerates the golden files. Use only after a deliberate
+// UX change.
 var update = flag.Bool("update", false, "update golden files")
 
-// goldenDir holds the recorded outputs for stability tests. Adding a
-// new test case is one fixture and one test entry — no hand-curating
-// of expected strings.
 const goldenDir = "../../testdata/golden"
 
 type goldenCase struct {
@@ -40,9 +36,8 @@ func TestGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Pin terminal width so the boxed-card layout is deterministic
-	// across machines. Without this the developer's $COLUMNS leaks
-	// into golden output and CI (no TTY → fallback 80) diverges.
+	// Pin width or the dev's $COLUMNS leaks into goldens and diverges
+	// from CI (no TTY → fallback 80).
 	t.Setenv("COLUMNS", "80")
 
 	for _, tc := range goldenCases {
@@ -52,8 +47,7 @@ func TestGolden(t *testing.T) {
 			cmd.SetOut(&buf)
 			cmd.SetErr(&buf)
 			cmd.SetArgs(tc.args)
-			// Tests must run in the cmd/optiqor directory so the
-			// "../../testdata/..." paths resolve.
+			// Must run in cmd/optiqor so ../../testdata/... resolves.
 			_ = cmd.Execute()
 			got := normalize(buf.String())
 
@@ -75,14 +69,8 @@ func TestGolden(t *testing.T) {
 	}
 }
 
-// normalize replaces filesystem-dependent paths with stable placeholders
-// so the golden file is portable across machines and CI runners.
-//
-// The analyze command resolves chart paths via filepath.Abs, which
-// embeds the runner's home/workspace prefix in the report's "Source"
-// field. We strip both the test's cwd and the repo root (one level
-// up) so the golden output stays bit-identical between a developer's
-// laptop and the GitHub Actions ubuntu-latest / macos-latest runners.
+// normalize strips the test's cwd and the repo root from filepath.Abs
+// output so goldens stay bit-identical across laptops and CI runners.
 func normalize(s string) string {
 	if cwd, err := os.Getwd(); err == nil {
 		s = strings.ReplaceAll(s, cwd, "<CWD>")

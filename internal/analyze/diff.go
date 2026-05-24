@@ -11,38 +11,34 @@ import (
 )
 
 // DiffEntry is the per-workload change between two values files.
-//
-// Sets are computed by name; a workload present only in B is "added"
-// (NewWorkload=true), only in A is "removed" (RemovedWorkload=true).
+// Workloads are matched by name: B-only → NewWorkload,
+// A-only → RemovedWorkload.
 type DiffEntry struct {
-	Name               string
-	NewWorkload        bool
-	RemovedWorkload    bool
-	CPURequestDelta    int64 // millicores; B - A
-	CPULimitDelta      int64
-	MemoryRequestDelta int64 // bytes; B - A
-	MemoryLimitDelta   int64
-	// MonthlyUSDCentsDelta is a sandbox-grade dollar estimate based on
-	// the resource deltas. ±40% disclosure caveat applies.
-	MonthlyUSDCentsDelta int64
+	Name                 string
+	NewWorkload          bool
+	RemovedWorkload      bool
+	CPURequestDelta      int64 // millicores; B - A
+	CPULimitDelta        int64
+	MemoryRequestDelta   int64 // bytes; B - A
+	MemoryLimitDelta     int64
+	MonthlyUSDCentsDelta int64 // sandbox estimate; ±40% disclosure applies
 }
 
-// DiffReport is the renderer-facing view of a diff run.
 type DiffReport struct {
 	A       string      `json:"a"`
 	B       string      `json:"b"`
 	Entries []DiffEntry `json:"entries"`
 }
 
-// Pricing constants must match those in internal/rules so the diff's
-// monthly delta is consistent with the analyze report's savings.
+// Pricing constants must stay in lockstep with internal/rules so the
+// diff's monthly delta matches the analyze report's savings.
 const (
-	cpuPriceCentsPerCoreHour = 4   // CPU $/vCPU-hour, AWS m5 baseline
-	cpuMonthlyHours          = 730 // hours per month, AWS billing convention
+	cpuPriceCentsPerCoreHour = 4   // $/vCPU-hour, AWS m5 baseline
+	cpuMonthlyHours          = 730 // hours/month, AWS billing convention
 	memPriceCentsPerGiBMonth = 350 // $3.50 per GiB-month
 )
 
-// Diff returns a DiffReport between two streams of Helm values.
+// Diff returns the DiffReport between two streams of Helm values.
 func Diff(a, b io.Reader, aLabel, bLabel string) (DiffReport, error) {
 	wlA, err := parser.ParseValues(a)
 	if err != nil {
@@ -79,10 +75,9 @@ func Diff(a, b io.Reader, aLabel, bLabel string) (DiffReport, error) {
 		entry.MemoryRequestDelta = qDelta(get(p.a, reqMem), get(p.b, reqMem))
 		entry.MemoryLimitDelta = qDelta(get(p.a, limMem), get(p.b, limMem))
 		entry.MonthlyUSDCentsDelta = monthlyDelta(entry)
-		// Suppress no-op entries: same workload on both sides with zero
-		// deltas. Keep New/Removed entries even when the resource math
-		// happens to net to zero — an added workload with no resources
-		// is still useful to surface.
+		// Suppress no-op entries (same on both sides, all zero deltas).
+		// Keep New/Removed even when math nets to zero — an added
+		// workload with no resources is still useful to surface.
 		if !entry.NewWorkload && !entry.RemovedWorkload &&
 			entry.CPURequestDelta == 0 && entry.CPULimitDelta == 0 &&
 			entry.MemoryRequestDelta == 0 && entry.MemoryLimitDelta == 0 {
@@ -95,7 +90,6 @@ func Diff(a, b io.Reader, aLabel, bLabel string) (DiffReport, error) {
 	return DiffReport{A: aLabel, B: bLabel, Entries: entries}, nil
 }
 
-// DiffPaths is the convenience wrapper used by `optiqor diff <a> <b>`.
 func DiffPaths(a, b string) (DiffReport, error) {
 	fa, err := openValues(a)
 	if err != nil {
@@ -110,9 +104,8 @@ func DiffPaths(a, b string) (DiffReport, error) {
 	return Diff(fa, fb, a, b)
 }
 
-// MonthlyUSDCentsDelta totals the per-entry deltas. Negative means
-// the change is a saving (B costs less than A); positive means a
-// regression.
+// MonthlyUSDCentsDelta totals the per-entry deltas. Negative is a
+// saving (B < A); positive is a regression.
 func (r DiffReport) MonthlyUSDCentsDelta() int64 {
 	var sum int64
 	for _, e := range r.Entries {
@@ -121,7 +114,6 @@ func (r DiffReport) MonthlyUSDCentsDelta() int64 {
 	return sum
 }
 
-// pair is an internal helper; one workload-name → A side and B side.
 type pair struct {
 	a, b *parser.Workload
 }
@@ -163,9 +155,8 @@ func qDelta(a, b parser.Quantity) int64 {
 	return bv - av
 }
 
-// monthlyDelta converts CPU and memory deltas into an estimated
-// monthly USD-cents difference. Sandbox-grade per the ±40%
-// disclosure; replaced by measured numbers when the agent ships.
+// monthlyDelta is sandbox-grade per the ±40% disclosure; the agent
+// replaces it with measured numbers.
 func monthlyDelta(e DiffEntry) int64 {
 	cpuMillicoreDelta := e.CPURequestDelta // request drives reserved capacity
 	memBytesDelta := e.MemoryRequestDelta

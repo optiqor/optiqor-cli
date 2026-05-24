@@ -11,9 +11,9 @@ import (
 
 func sample() Data {
 	return Data{
-		Source:    "demo",
-		Workloads: 3,
-		ShareURL:  "https://optiqor.dev/r/abc123",
+		Source:      "demo",
+		Workloads:   3,
+		ShareURL:    "https://optiqor.dev/r/abc123",
 		GeneratedAt: time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC),
 		Findings: []rules.Finding{
 			{
@@ -111,7 +111,6 @@ func TestRender_NoFindings_CleanState(t *testing.T) {
 }
 
 func TestRender_DeterministicAcrossRuns(t *testing.T) {
-	// Same input within the same minute must produce identical bytes.
 	t1 := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
 	t2 := time.Date(2026, 5, 11, 14, 30, 45, 0, time.UTC)
 	d := sample()
@@ -149,10 +148,10 @@ func TestRender_WritesToWriter(t *testing.T) {
 
 func TestFmtUSD(t *testing.T) {
 	for cents, want := range map[int64]string{
-		0:     "$0",
-		1:     "$0.01",
-		100:   "$1",
-		12345: "$123.45",
+		0:          "$0",
+		1:          "$0.01",
+		100:        "$1",
+		12345:      "$123.45",
 		12_345_678: "$123,456.78",
 	} {
 		if got := fmtUSD(cents); got != want {

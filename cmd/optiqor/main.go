@@ -1,9 +1,6 @@
-// Command optiqor is the entrypoint for the open-source Optiqor CLI.
-//
-// The CLI is a deterministic rule engine that analyzes Helm charts for cost
-// inefficiencies. It also flags obvious security misconfigurations as a bonus
-// side-effect of parsing. It does NOT call any LLM and does NOT phone home by
-// default — see ../../CLAUDE.md for the hard rules.
+// Command optiqor is the open-source CLI entrypoint. Deterministic
+// rule engine — no LLM, no telemetry by default. See ../../CLAUDE.md
+// for the hard rules.
 package main
 
 import (
@@ -39,6 +36,8 @@ var errFindings = errors.New("optiqor: findings exceed threshold")
 
 var version = "dev"
 
+// accuracyDisclosure is the mandatory line every command's help and
+// output must contain (hard rule per CLAUDE.md).
 const accuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
 func main() {
@@ -47,7 +46,7 @@ func main() {
 	case err == nil:
 		os.Exit(exitSuccess)
 	case errors.Is(err, errFindings):
-		// Already-rendered finding output; suppress an additional error line.
+		// Findings already rendered; suppress an extra error line.
 		os.Exit(exitFindings)
 	default:
 		printError(os.Stderr, err)
@@ -92,14 +91,12 @@ namespaces, etc.). Cost is the headline; security is a side-effect.
 	root.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output (also: NO_COLOR env)")
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to .optiqor.yaml (default: ./.optiqor.yaml or $OPTIQOR_CONFIG)")
 
-	// Stash the no-color decision and the loaded config in context so
-	// subcommands can read both.
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		cfg, err := config.Load(configPath)
 		if err != nil {
 			return err
 		}
-		// Config-level no_color implies --no-color unless flag explicitly disabled.
+		// Config-level no_color implies --no-color.
 		effectiveNoColor := noColor || cfg.NoColor
 		ctx := cmd.Context()
 		ctx = withColorPolicy(ctx, resolveColor(cmd, effectiveNoColor))
@@ -123,7 +120,6 @@ namespaces, etc.). Cost is the headline; security is a side-effect.
 	return root
 }
 
-// versionTemplate prints a polished one-liner including the brand.
 func versionTemplate() string {
 	return fmt.Sprintf("optiqor %s — %s\n", version, "Helm chart cost analysis (security bonus)")
 }
@@ -168,7 +164,7 @@ side-effect of parsing — they are not the headline feature.
 				return err
 			}
 
-			// Merge config-file defaults with flags. Flags win when supplied.
+			// Flags win over config when supplied.
 			cfg := configFrom(cmd.Context())
 			effSev := minSev
 			if effSev == "" {
@@ -194,8 +190,7 @@ side-effect of parsing — they are not the headline feature.
 				if err := writeHTMLReport(htmlPath, rep); err != nil {
 					return err
 				}
-				// --html is a side-channel: text/JSON still prints to
-				// stdout so users get the terminal report AND a file.
+				// --html is side-channel; stdout still gets text/JSON.
 			}
 			if err := emitReport(cmd, rep, jsonOut, outputPath, roast); err != nil {
 				return err
@@ -219,10 +214,9 @@ side-effect of parsing — they are not the headline feature.
 	return cmd
 }
 
-// writeHTMLReport renders rep through pkg/htmlrender into the file at
-// path. The same package is consumed by the backend's share-page
-// handler so the local file and the optiqor.dev/r/<hash> page render
-// byte-identically.
+// writeHTMLReport: pkg/htmlrender is also consumed by the backend's
+// share-page handler so the local file and optiqor.dev/r/<hash>
+// render byte-identically.
 func writeHTMLReport(path string, rep render.Report) error {
 	f, err := os.Create(path) //nolint:gosec // user-supplied output path
 	if err != nil {
@@ -237,12 +231,9 @@ func writeHTMLReport(path string, rep render.Report) error {
 	})
 }
 
-// emitReport renders the report in JSON or styled text. When
-// outputPath is non-empty the rendered bytes go to that file instead
-// of stdout (CI use case: `optiqor analyze --json --output result.json`).
-// The roast flag swaps the brand tagline and footer quip for the
-// `--roast` variants; finding titles are roasted upstream by the
-// analyze command before the report reaches here.
+// emitReport writes JSON or styled text. outputPath redirects to a
+// file (CI use case); roast swaps tagline/footer — finding titles
+// are roasted upstream in the analyze command.
 func emitReport(cmd *cobra.Command, rep render.Report, jsonOut bool, outputPath string, roast bool) error {
 	w, closeFn, err := openOutput(cmd, outputPath)
 	if err != nil {
@@ -259,9 +250,9 @@ func emitReport(cmd *cobra.Command, rep render.Report, jsonOut bool, outputPath 
 	return render.Text(w, rep, opts)
 }
 
-// openOutput resolves the destination: stdout when path is empty;
-// otherwise creates / truncates the file. The returned closer is a
-// no-op for stdout so callers can defer it unconditionally.
+// openOutput returns stdout when path is empty, otherwise opens the
+// file. The closer is a no-op for stdout so callers defer it
+// unconditionally.
 func openOutput(cmd *cobra.Command, path string) (io.Writer, func(), error) {
 	if path == "" {
 		return cmd.OutOrStdout(), func() {}, nil
@@ -273,22 +264,15 @@ func openOutput(cmd *cobra.Command, path string) (io.Writer, func(), error) {
 	return f, func() { _ = f.Close() }, nil
 }
 
-// emitShareURL handles the `--share` flag end-to-end.
-//
-// It computes the local content-addressable hash, attempts to upload
-// the sanitised payload to the sandbox endpoint, and prints the
-// resulting `optiqor.dev/r/<hash>` URL to stderr (so JSON/text output on
-// stdout stays clean).
-//
-// The function never blocks the caller's success path — if the upload
-// fails (offline, sandbox down, 5xx), we still print the URL so the
-// user has a stable identifier they can re-share later. The endpoint
-// is overridable via OPTIQOR_SHARE_URL for self-hosted deploys.
+// emitShareURL handles --share end-to-end. Prints to stderr so
+// stdout (JSON/text) stays clean. Never blocks the success path — on
+// upload failure we still print the URL so the user has a stable
+// identifier to re-share later. OPTIQOR_SHARE_URL overrides the
+// endpoint for self-hosted deploys.
 func emitShareURL(cmd *cobra.Command, rep any) {
 	endpoint := os.Getenv("OPTIQOR_SHARE_URL")
 	res := share.Upload(rep, endpoint)
 	if res.Hash == "" {
-		// Hash failed entirely — nothing to print.
 		return
 	}
 	suffix := ""
@@ -301,7 +285,7 @@ func emitShareURL(cmd *cobra.Command, rep any) {
 }
 
 // checkFailOn returns errFindings when any finding meets or exceeds
-// the threshold severity. Empty threshold is a no-op.
+// threshold. Empty threshold is a no-op.
 func checkFailOn(rep render.Report, threshold string) error {
 	if threshold == "" {
 		return nil
@@ -346,9 +330,8 @@ func toUpper(s string) string {
 	return string(out)
 }
 
-// demoChart is the bundled demo values file. //go:embed lets us ship
-// the fixture inside the binary so `npx @optiqor/cli demo` works with
-// no input.
+// demoChart ships inside the binary so `npx @optiqor/cli demo` works
+// with no input.
 //
 //go:embed demo/values.yaml
 var demoChart []byte
@@ -385,8 +368,8 @@ func newDemoCmd() *cobra.Command {
 	return cmd
 }
 
-// renderOpts builds a render.Options for the active command, picking up
-// the colour-policy decision the persistent pre-run stashed in context.
+// renderOpts picks up the colour-policy decision stashed by the
+// persistent pre-run.
 func renderOpts(cmd *cobra.Command) render.Options {
 	return render.Options{
 		Color: colorPolicyFrom(cmd.Context()),
@@ -394,10 +377,8 @@ func renderOpts(cmd *cobra.Command) render.Options {
 	}
 }
 
-// renderOptsRoast extends renderOpts with the roast-mode strings so
-// the renderer prints the playful tagline + footer quip without
-// importing the roast package itself. Findings are roasted upstream
-// in the analyze command (see internal/roast).
+// renderOptsRoast supplies the playful strings so render stays
+// unaware of internal/roast.
 func renderOptsRoast(cmd *cobra.Command) render.Options {
 	o := renderOpts(cmd)
 	o.Roast = true
@@ -406,14 +387,13 @@ func renderOptsRoast(cmd *cobra.Command) render.Options {
 	return o
 }
 
-// resolveColor decides whether to emit ANSI for a given command.
-// Order of precedence (highest to lowest):
+// resolveColor decides whether to emit ANSI. Precedence:
 //
 //  1. --no-color flag
-//  2. NO_COLOR env var (any non-empty value, per https://no-color.org)
-//  3. CLICOLOR_FORCE=1 forces color even when not a TTY
-//  4. stdout is a TTY → color on
-//  5. otherwise → color off
+//  2. NO_COLOR (per https://no-color.org)
+//  3. CLICOLOR_FORCE=1 forces colour even when not a TTY
+//  4. stdout is a TTY → on
+//  5. otherwise → off
 func resolveColor(cmd *cobra.Command, noColor bool) bool {
 	if noColor {
 		return false
@@ -431,8 +411,7 @@ func resolveColor(cmd *cobra.Command, noColor bool) bool {
 	return style.IsTTY(out)
 }
 
-// terminalWidth returns the current terminal width (cols). Falls back
-// to 80 when not a TTY or when reading $COLUMNS fails.
+// terminalWidth returns $COLUMNS or 80.
 func terminalWidth() int {
 	if v := os.Getenv("COLUMNS"); v != "" {
 		if n, err := atoi(v); err == nil && n > 20 {
@@ -453,7 +432,7 @@ func atoi(s string) (int, error) {
 	return n, nil
 }
 
-// printError renders an error in red on a TTY; plain on a pipe.
+// printError renders in red on a TTY; plain on a pipe.
 func printError(w io.Writer, err error) {
 	if err == nil {
 		return
@@ -466,8 +445,7 @@ func printError(w io.Writer, err error) {
 	_, _ = fmt.Fprintln(w, t.SevHigh.Render(" ERROR ")+" "+err.Error())
 }
 
-// bytesReader is a tiny adapter so analyze.Run can read from a byte slice
-// without pulling in bytes.NewReader at the import-graph root of main.
+// bytesReader avoids pulling bytes.NewReader into the main import graph.
 func bytesReader(b []byte) *bytesReaderImpl { return &bytesReaderImpl{b: b} }
 
 type bytesReaderImpl struct {

@@ -35,8 +35,8 @@ func TestHash_Stable(t *testing.T) {
 }
 
 func TestHash_IgnoresSourcePath(t *testing.T) {
-	// Two reports differing only in the source path must hash to the
-	// same value — that's the point of sanitisation.
+	// Source-path differences must not change the hash — that's the
+	// point of sanitisation.
 	a := sample{Source: "/home/alice/chart", Workloads: 1}
 	b := sample{Source: "/home/bob/chart", Workloads: 1}
 	ha, _ := Hash(a)

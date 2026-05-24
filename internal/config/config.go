@@ -1,16 +1,12 @@
-// Package config loads `.optiqor.yaml` for the CLI.
-//
-// The config file lets users persist common flag combinations (e.g.
-// "always exclude this detector", "always set --severity=med") so a
-// `optiqor analyze` invocation in a known repo behaves consistently
-// without flag-soup. Flags still override config when supplied.
+// Package config loads `.optiqor.yaml` for the CLI. Flags override
+// config when supplied.
 //
 // Lookup order (first match wins):
 //
 //  1. --config <path>
 //  2. OPTIQOR_CONFIG env var
-//  3. ./.optiqor.yaml in the current working directory
-//  4. zero value (no config)
+//  3. ./.optiqor.yaml in cwd
+//  4. zero value
 package config
 
 import (
@@ -23,28 +19,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the on-disk schema. Add fields in additive-only fashion
-// — old configs must keep loading after schema growth.
+// Config is the on-disk schema. Add fields additive-only — old
+// configs must keep loading after schema growth.
 type Config struct {
-	// MinSeverity is the default --severity flag.
-	MinSeverity string `yaml:"min_severity,omitempty"`
-	// Detectors is the default --detector allow-list.
-	Detectors []string `yaml:"detectors,omitempty"`
-	// FailOn is the default --fail-on threshold.
-	FailOn string `yaml:"fail_on,omitempty"`
-	// NoColor disables ANSI output everywhere.
-	NoColor bool `yaml:"no_color,omitempty"`
+	MinSeverity string   `yaml:"min_severity,omitempty"`
+	Detectors   []string `yaml:"detectors,omitempty"`
+	FailOn      string   `yaml:"fail_on,omitempty"`
+	NoColor     bool     `yaml:"no_color,omitempty"`
 }
 
-// ConfigName is the conventional filename. Hidden so it doesn't
-// clutter `ls`.
 const ConfigName = ".optiqor.yaml"
 
-// Load resolves and reads the config. Returns the zero Config when no
-// file is present (which is the safe default — users opt in by
-// creating one). Returns an error only when a file is named
-// explicitly via --config or OPTIQOR_CONFIG and that file fails to
-// load.
+// Load returns the zero Config when no file is present (users opt in
+// by creating one). Errors only when an explicit --config /
+// OPTIQOR_CONFIG path fails to load.
 func Load(explicit string) (Config, error) {
 	if explicit != "" {
 		return readFile(explicit)
@@ -72,7 +60,6 @@ func readFile(path string) (Config, error) {
 	return Decode(f)
 }
 
-// Decode reads a YAML config from r.
 func Decode(r io.Reader) (Config, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -91,7 +78,6 @@ func Decode(r io.Reader) (Config, error) {
 	return c, nil
 }
 
-// Validate checks the config for known-good values.
 func (c Config) Validate() error {
 	for _, key := range []struct {
 		name, value string
@@ -104,7 +90,6 @@ func (c Config) Validate() error {
 		}
 		switch toLower(key.value) {
 		case "low", "med", "medium", "high":
-			// ok
 		default:
 			return fmt.Errorf("config: %s must be low|med|high (got %q)", key.name, key.value)
 		}
@@ -112,9 +97,8 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// ErrNotFound is returned by Load when an explicit config path was
-// supplied but did not resolve to a file. Default Load (no explicit
-// path) does not return this — it returns a zero Config.
+// ErrNotFound is returned only when an explicit config path was
+// supplied and the file is missing; default Load returns a zero Config.
 var ErrNotFound = errors.New("config: file not found")
 
 func toLower(s string) string {

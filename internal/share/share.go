@@ -1,18 +1,11 @@
 // Package share computes a content-addressable hash of an analysis
-// payload and produces a `optiqor.dev/r/<hash>` URL.
+// and produces an optiqor.dev/r/<hash> URL.
 //
-// The CLI's `--share` flag is the only network egress optiqor takes
-// in Phase 1. Even then, Phase 1 ships only the local hashing — the
-// actual upload endpoint lives behind the public sandbox (Phase 2).
-// Until that lands, the CLI prints the hash + URL so users get a
-// stable identifier they can manually copy into a optiqor.dev/r/<hash>
-// page once the endpoint is live.
-//
-// Hard rules (from CLAUDE.md):
+// Hard rules (CLAUDE.md):
 //   - No telemetry by default. The CLI must never call out unless
 //     the user explicitly passes --share.
-//   - PII minimisation. We hash a *sanitised* payload — file paths
-//     and user identifiers are stripped before hashing.
+//   - PII minimisation. We hash a sanitised payload — file paths and
+//     user identifiers are stripped before hashing.
 package share
 
 import (
@@ -27,30 +20,16 @@ import (
 	"time"
 )
 
-// BaseURL is the public share host. Hashes resolve to a read-only HTML
-// view of the analysis once Phase 2 ships the sandbox; until then the
-// URL is informational.
 const BaseURL = "https://optiqor.dev/r/"
 
-// HashLen controls how many hex characters of the SHA-256 digest the
-// CLI exposes in the URL. 12 chars (48 bits) is collision-safe at the
-// query volumes Phase 1 expects; larger digests stay available via the
-// JSON output.
+// HashLen of 12 hex chars (48 bits) is collision-safe at Phase 1
+// query volumes; full digests stay available via JSON output.
 const HashLen = 12
 
-// Sanitise removes from `report` any fields that could contain user
-// or environment-specific data before hashing. The output has the
-// same shape as the original report; consumers should not assume
-// payload bytes are equal between runs that differ only in source
-// path.
-//
-// Specifically we strip:
-//   - report.source — replaced with "(redacted)"
-//   - finding.detail content past the first 256 chars (caps payload
-//     size; details are deterministic per finding so this is safe)
-//
-// Anything else is kept; the values themselves are the analysis
-// signature we're hashing.
+// Sanitise strips environment-specific fields before hashing:
+//   - report.source → "(redacted)"
+//   - finding.detail capped at 256 chars (details are deterministic
+//     per finding so the truncation is safe)
 func Sanitise(report any) (any, error) {
 	raw, err := json.Marshal(report)
 	if err != nil {
@@ -77,10 +56,9 @@ func Sanitise(report any) (any, error) {
 	return doc, nil
 }
 
-// Hash returns the hex-encoded SHA-256 of the sanitised JSON encoding
-// of report, truncated to HashLen characters. Stable: same input always
-// produces the same hash, regardless of map ordering (we use Marshal's
-// sorted-key emission).
+// Hash returns the hex-encoded SHA-256 of the sanitised JSON
+// encoding, truncated to HashLen. Stable across runs — relies on
+// encoding/json's sorted-key emission.
 func Hash(report any) (string, error) {
 	sanitised, err := Sanitise(report)
 	if err != nil {
@@ -94,7 +72,6 @@ func Hash(report any) (string, error) {
 	return hex.EncodeToString(sum[:])[:HashLen], nil
 }
 
-// URL returns the full optiqor.dev/r/<hash> URL for the report.
 func URL(report any) (string, error) {
 	h, err := Hash(report)
 	if err != nil {
@@ -103,9 +80,8 @@ func URL(report any) (string, error) {
 	return BaseURL + h, nil
 }
 
-// canonicalJSON marshals v with deterministic key ordering. Go's
-// encoding/json already sorts map keys, but nested types may not — we
-// re-marshal through map[string]any to ensure stability.
+// canonicalJSON re-marshals through map[string]any so nested types
+// also get encoding/json's sorted-key ordering.
 func canonicalJSON(v any) ([]byte, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -118,33 +94,25 @@ func canonicalJSON(v any) ([]byte, error) {
 	return json.Marshal(doc)
 }
 
-// UploadEndpoint is the public sandbox endpoint that accepts a
-// sanitised analysis blob. Phase 2 ships the receiver behind this
-// URL; until then the CLI gracefully falls back to printing the
-// hash + URL stub when the endpoint is unreachable. Override via
+// UploadEndpoint accepts a sanitised analysis blob. Override via
 // OPTIQOR_SHARE_URL for self-hosted Optiqor deployments.
 const UploadEndpoint = "https://sandbox.optiqor.dev/api/v1/share"
 
-// uploadTimeout caps how long we wait before giving up and printing
-// the local hash. Keep tight — the CLI is interactive.
+// uploadTimeout keeps tight — the CLI is interactive.
 const uploadTimeout = 5 * time.Second
 
-// UploadResult is what Upload returns. The hash + URL fields are
-// always populated; Posted reports whether the upload itself succeeded.
+// UploadResult: Hash + URL are always populated; Posted reports
+// whether the HTTP POST returned 2xx.
 type UploadResult struct {
 	Hash   string
 	URL    string
-	Posted bool   // true when the HTTP POST returned 2xx
-	Error  string // non-empty when Posted=false
+	Posted bool
+	Error  string
 }
 
-// Upload attempts to POST the sanitised report JSON to endpoint and
-// returns the resulting (hash, URL, posted) tuple.
-//
-// CLI hard rule: this is the only outbound network call optiqor makes,
-// and only when the user explicitly passes --share. The function never
-// retries; never logs request bodies; never sends anything but the
-// sanitised payload.
+// Upload POSTs the sanitised report JSON. Hard rule: the only
+// outbound call the CLI makes, and only on --share. Never retries,
+// never logs bodies, never sends anything but the sanitised payload.
 func Upload(report any, endpoint string) UploadResult {
 	hash, err := Hash(report)
 	if err != nil {
@@ -187,8 +155,6 @@ func Upload(report any, endpoint string) UploadResult {
 }
 
 // IsHash reports whether s looks like a hash this package would emit.
-// Useful for accepting `optiqor <subcommand> --share-hash <id>` reads
-// in future phases.
 func IsHash(s string) bool {
 	if len(s) != HashLen {
 		return false

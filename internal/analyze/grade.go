@@ -2,35 +2,19 @@ package analyze
 
 import "sort"
 
-// Grade is a letter projection of a 0–100 efficiency score, paired
-// with the percentile rank against the calibration distribution
-// baked into the binary.
-//
-// Why two numbers?
-//
-// The raw 0–100 score is precise but has no context: scoring 72 only
-// matters relative to peers. The letter grade gives an immediate
-// "where do I sit?" signal (B-, C+, F …); the percentile rank is the
-// honest comparison that drives the social loop ("better than 64% of
-// charts we benchmarked"). Both derive deterministically from the
-// same underlying [Score].
+// Grade pairs a letter projection of a 0–100 efficiency score with a
+// percentile rank against the baked-in calibration distribution. The
+// letter is the at-a-glance signal; the percentile is the honest
+// comparison ("better than 64% of charts we benchmarked") that drives
+// the social-share loop.
 type Grade struct {
-	// Letter is the conventional A+/A/A-/B+/B/B-/C+/C/C-/D/F mapping.
-	Letter string `json:"letter"`
-
-	// PercentileRank is the percentage of calibration scores that
-	// this score beats (0–100, integer). 50 means median; 0 means
-	// worst-in-class; 100 means top of the calibrated set.
-	PercentileRank int `json:"percentile_rank"`
-
-	// Sample is the size of the calibration distribution. Surfaced in
-	// the renderer as "better than X% of N benchmark charts" so users
-	// know what they're being compared against.
-	Sample int `json:"sample_size"`
+	Letter         string `json:"letter"`          // A+/A/A-/B+/B/B-/C+/C/C-/D/F
+	PercentileRank int    `json:"percentile_rank"` // 0–100, % of calibration set beaten
+	Sample         int    `json:"sample_size"`     // size of the calibration distribution
 }
 
-// GradeFor folds a numeric score into a [Grade]. Pure function;
-// deterministic given the baked calibration distribution.
+// GradeFor folds a numeric score into a Grade. Pure and deterministic
+// against the baked calibration set.
 func GradeFor(score int) Grade {
 	return Grade{
 		Letter:         letterFor(score),
@@ -39,10 +23,9 @@ func GradeFor(score int) Grade {
 	}
 }
 
-// letterFor maps a 0–100 score to a conventional letter grade.
-// Bands are informed by US academic convention (90+=A, 80+=B, etc.)
-// and biased slightly toward "easier to get a B" since most real
-// Helm charts cluster in the 60–80 band.
+// letterFor uses US academic bands (90+=A, 80+=B, ...) biased
+// slightly toward "easier to get a B" since real Helm charts cluster
+// in the 60–80 band.
 func letterFor(score int) string {
 	switch {
 	case score >= 95:
@@ -70,15 +53,12 @@ func letterFor(score int) string {
 	}
 }
 
-// percentileRank returns the integer percentage of the population
-// that scored strictly less than score. Population must already be
-// sorted ascending.
+// percentileRank returns the integer percentage of population that
+// scored strictly less than score. Population must be sorted asc.
 func percentileRank(score int, population []int) int {
 	if len(population) == 0 {
 		return 0
 	}
-	// sort.Search finds the lowest index i where population[i] >=
-	// score; the count of strictly-less is exactly i.
 	below := sort.Search(len(population), func(i int) bool {
 		return population[i] >= score
 	})
@@ -89,17 +69,11 @@ func percentileRank(score int, population []int) int {
 	return rank
 }
 
-// calibrationScores is the baked-in benchmark distribution that
-// powers the percentile readout in [GradeFor]. The distribution is
-// modelled (not telemetered) — the CLI keeps its no-telemetry
-// promise; a live percentile derived from real merged-PR outcomes
-// arrives with the agent install per the strategy docs.
-//
-// Shape: 100 samples, beta-style curve centred ~70 with realistic
-// spread. The mean and median fall in the C+/B- band, which matches
-// the "most charts have one or two HIGH findings" empirical pattern
-// we see in public charts. Must remain sorted ascending — the
-// percentile lookup is a binary search.
+// calibrationScores is the modelled (not telemetered) benchmark
+// distribution that powers GradeFor's percentile readout — the CLI's
+// no-telemetry hard rule means we can't ship a real distribution
+// until the agent does. 100 samples, beta-style curve centred ~70.
+// Must stay sorted ascending; percentileRank is a binary search.
 var calibrationScores = []int{
 	18, 22, 24, 26, 28, 30, 31, 33, 34, 35,
 	37, 38, 39, 40, 41, 42, 43, 44, 45, 46,

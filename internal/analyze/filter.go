@@ -8,20 +8,13 @@ import (
 )
 
 // FilterOptions narrows a Report's findings before rendering.
-//
-//   - MinSeverity drops findings whose severity is below the threshold.
-//   - DetectorIDs (when non-empty) keeps only findings emitted by the
-//     listed detectors.
-//   - SecurityOnly keeps only the security-class findings that the
-//     `optiqor audit` command surfaces.
 type FilterOptions struct {
 	MinSeverity  rules.Severity
-	DetectorIDs  []string
-	SecurityOnly bool
+	DetectorIDs  []string // empty → all detectors
+	SecurityOnly bool     // backs the `optiqor audit` command
 }
 
-// Filter applies the options to a Report's findings and returns a
-// new Report. The original Report is not mutated.
+// Filter returns a new Report; the input is not mutated.
 func Filter(r render.Report, opts FilterOptions) render.Report {
 	if opts.MinSeverity == "" && len(opts.DetectorIDs) == 0 && !opts.SecurityOnly {
 		return r

@@ -1,20 +1,11 @@
-// Package roast applies a tone-pass to an analysis report so the
-// `--roast` flag renders viral-friendly copy without changing what
-// the report actually says.
+// Package roast applies a tone-pass to a report for `--roast`.
 //
 // Hard rules (mirroring CLAUDE.md):
-//
 //   - No LLM calls. Roast titles are a static map keyed by detector ID.
-//     A new detector ships with a roast line in this package; until
-//     that lands the original title is used unchanged.
-//   - The detail (long-form explanation) and the dollar/severity/
-//     confidence numbers are NEVER rewritten. Only Title and the
-//     report-level Tagline change.
-//   - The mandatory accuracy disclosure stays exactly as-is. Roast
-//     adds a quip after it; it never replaces it.
-//
-// The package operates on a [render.Report] by returning a roasted
-// copy; the input is not mutated.
+//   - Detail / dollar / severity / confidence are NEVER rewritten —
+//     only Title and the report-level Tagline change.
+//   - The mandatory accuracy disclosure stays exactly as-is; roast
+//     appends a quip after it, it never replaces it.
 package roast
 
 import (
@@ -22,41 +13,36 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
-// Tagline is what the roasted header prints under the brand mark in
-// place of [render.BrandTagline]. The renderer reads it via
-// [render.Options].
+// Tagline replaces render.BrandTagline under the brand mark when
+// --roast is set; the renderer reads it via render.Options.
 const Tagline = "Helm chart cost roast — your YAML deserves it"
 
-// FooterQuip is appended to the footer (after the accuracy
-// disclosure, which is mandatory and untouched).
+// FooterQuip appends after the accuracy disclosure (which is
+// mandatory and untouched).
 const FooterQuip = "Receipts > vibes. Install the agent for the actual bill: optiqor.dev/get"
 
-// titles maps detector IDs to roast-flavored Title replacements.
-// Findings whose detector is not in the map keep their original
-// Title — graceful degradation when a new detector ships.
+// titles: unknown detector IDs keep their original Title (graceful
+// degradation). Ordering tracks pkg/rules.All() so reviewers can scan
+// top-to-bottom and confirm every detector has a line.
 //
-// Ordering follows pkg/rules.All() so a code reviewer can scan top-
-// to-bottom and check every detector got a line.
-//
-//nolint:gosec // G101 false positive: this map keys detector IDs to
-// joke titles; nothing here is a credential.
+//nolint:gosec // G101 false positive: detector IDs and joke titles, no credentials.
 var titles = map[string]string{
 	// ---- Cost / efficiency ----------------------------------------
-	"cpu-overprovisioned":         "CPU on a buffet plan, eating air",
-	"memory-overprovisioned":      "RAM hoarder spotted",
-	"cpu-limit-far-above-request": "CPU limit cosplaying as the request",
+	"cpu-overprovisioned":            "CPU on a buffet plan, eating air",
+	"memory-overprovisioned":         "RAM hoarder spotted",
+	"cpu-limit-far-above-request":    "CPU limit cosplaying as the request",
 	"memory-limit-far-above-request": "Memory limit set to ‘yes’",
-	"oversized-cpu-limit":         "CPU limit thinks it’s a mainframe",
-	"oversized-memory-limit":      "Memory limit measured in optimism",
-	"replicas-too-high":           "Replicas: more is more, allegedly",
-	"excessive-replica-count":     "Counting replicas like sheep, but billed",
-	"unbounded-image-tag":         "Image tag :latest, the eternal mystery",
-	"cpu-without-memory-request":  "CPU set, memory hopes for the best",
-	"memory-without-cpu-request":  "Memory set, CPU left to vibes",
-	"cpu-request-equals-limit":    "Guaranteed QoS, guaranteed bill",
-	"memory-request-equals-limit": "Memory request equals limit, equals waste",
-	"tiny-cpu-request":            "CPU request smaller than a tweet",
-	"tiny-memory-request":         "Memory request: ‘ehh, should be fine’",
+	"oversized-cpu-limit":            "CPU limit thinks it’s a mainframe",
+	"oversized-memory-limit":         "Memory limit measured in optimism",
+	"replicas-too-high":              "Replicas: more is more, allegedly",
+	"excessive-replica-count":        "Counting replicas like sheep, but billed",
+	"unbounded-image-tag":            "Image tag :latest, the eternal mystery",
+	"cpu-without-memory-request":     "CPU set, memory hopes for the best",
+	"memory-without-cpu-request":     "Memory set, CPU left to vibes",
+	"cpu-request-equals-limit":       "Guaranteed QoS, guaranteed bill",
+	"memory-request-equals-limit":    "Memory request equals limit, equals waste",
+	"tiny-cpu-request":               "CPU request smaller than a tweet",
+	"tiny-memory-request":            "Memory request: ‘ehh, should be fine’",
 
 	// ---- Security (still surfaced as bonus) -----------------------
 	"missing-cpu-limit":               "No CPU limit — let it cook",
@@ -76,12 +62,8 @@ var titles = map[string]string{
 	"service-account-token-automount": "SA token auto-mounted, attacker auto-pivots",
 }
 
-// Apply returns a roasted copy of r. Roast is a pure transformation:
-// titles get rewritten where we have a match, the report-level
-// metadata gets a tone tag, and the original Report is left alone.
-//
-// The returned Report points at a fresh Findings slice. Findings
-// that didn't have a roast title-replacement keep their originals.
+// Apply returns a roasted copy of r; the input is not mutated. The
+// returned Report owns a fresh Findings slice.
 func Apply(r render.Report) render.Report {
 	out := r
 	out.Findings = make([]rules.Finding, len(r.Findings))
@@ -92,8 +74,8 @@ func Apply(r render.Report) render.Report {
 	return out
 }
 
-// titleFor returns the roast title for a finding when one exists,
-// otherwise the original. Exposed for tests.
+// titleFor returns the roast title if one exists, else the original.
+// Exposed for tests.
 func titleFor(f rules.Finding) string {
 	if alt, ok := titles[f.DetectorID]; ok {
 		return alt

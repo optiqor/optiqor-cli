@@ -11,8 +11,8 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/parser"
 )
 
-// WriteText renders the diff as styled text. Always includes the
-// accuracy disclosure (CLAUDE.md hard rule).
+// WriteText renders the diff as styled text. The accuracy
+// disclosure is mandatory (CLAUDE.md hard rule).
 func (r DiffReport) WriteText(w io.Writer, opts render.Options) error {
 	t := style.NewTheme(opts.Color)
 	width := opts.Width
@@ -59,7 +59,6 @@ func (r DiffReport) WriteText(w io.Writer, opts render.Options) error {
 	return err
 }
 
-// WriteJSON renders the diff as machine-readable JSON.
 func (r DiffReport) WriteJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

@@ -22,7 +22,6 @@ func (serviceAccountTokenAutomount) Name() string {
 }
 
 func (serviceAccountTokenAutomount) Run(w parser.Workload) []Finding {
-	// Explicit false → no finding.
 	if w.Security.AutomountServiceAccountToken != nil && !*w.Security.AutomountServiceAccountToken {
 		return nil
 	}

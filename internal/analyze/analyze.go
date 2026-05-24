@@ -1,7 +1,4 @@
-// Package analyze orchestrates one Optiqor CLI run: parser → rules → render.
-//
-// Callers (cmd/optiqor/main.go, tests, future SDK consumers) hand in a
-// values reader and an Options struct, get back a render.Report.
+// Package analyze orchestrates one CLI run: parser → rules → render.
 package analyze
 
 import (
@@ -17,16 +14,11 @@ import (
 
 // Options controls a single analysis run.
 type Options struct {
-	// Source identifies what was analysed (a file path or "stdin").
-	// Surfaced verbatim in the report header.
-	Source string
-
-	// Detectors is the set to apply. nil → rules.All().
-	Detectors []rules.Detector
+	Source    string           // file path or "stdin", surfaced in the report header
+	Detectors []rules.Detector // nil → rules.All()
 }
 
-// Run reads a Helm values document from r and returns the populated
-// report. Errors come from YAML parse failures or IO.
+// Run reads a Helm values document from r and returns the report.
 func Run(r io.Reader, opts Options) (render.Report, error) {
 	wls, err := parser.ParseValues(r)
 	if err != nil {
@@ -43,9 +35,8 @@ func Run(r io.Reader, opts Options) (render.Report, error) {
 	}, nil
 }
 
-// RunPath is the convenience entrypoint used by the `analyze`
-// subcommand. It accepts either a file or a directory; for a directory
-// it reads `values.yaml` at the root.
+// RunPath accepts a values file or a directory containing
+// values.yaml at the root.
 func RunPath(path string) (render.Report, error) {
 	info, err := os.Stat(path)
 	if err != nil {

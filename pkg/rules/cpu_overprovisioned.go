@@ -23,9 +23,8 @@ func (cpuOverprovisioned) Name() string { return "CPU request overprovisioned" }
 const (
 	cpuOverprovRatio        = 0.5 // request/limit threshold
 	cpuOverprovMonthlyHours = 730 // hours per month, AWS billing convention
-	// Rough $/vCPU/hour (AWS m5.large baseline). Used only when no
-	// agent-measured cost basis is available; the disclosure banner
-	// says ±40% explicitly.
+	// cpuPricePerCoreHourCents is the AWS m5.large baseline. Sandbox-only;
+	// the agent product uses the customer's actual bill.
 	cpuPricePerCoreHourCents = 4
 )
 
@@ -40,7 +39,7 @@ func (cpuOverprovisioned) Run(w parser.Workload) []Finding {
 	if float64(req.Value)/float64(lim.Value) <= cpuOverprovRatio {
 		return nil
 	}
-	// Estimate savings: assume right-size to 50% of current request.
+	// Savings: right-size to 50% of current request.
 	excessMillicores := req.Value / 2
 	monthlyCents := excessMillicores * cpuOverprovMonthlyHours * cpuPricePerCoreHourCents / 1000
 	return []Finding{{
