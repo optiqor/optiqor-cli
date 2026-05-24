@@ -325,7 +325,7 @@ CLI binaries run on customer laptops. The supply chain is a primary attack surfa
 
 Conventional Commits. One concern per commit. DCO sign-off required (`-s` flag, enforced by CI).
 
-See [.claude/skills/commit/SKILL.md](.claude/skills/commit/SKILL.md) for the rules and the local quality gate (gofmt + vet + build + test -race + lint).
+Local quality gate before pushing: `gofmt -l .` (must be empty), `go vet ./...`, `go build ./...`, `go test -race -count=1 ./...`, `golangci-lint run --timeout=2m ./...`.
 
 ### Pull requests
 
@@ -339,11 +339,11 @@ See [.claude/skills/commit/SKILL.md](.claude/skills/commit/SKILL.md) for the rul
 
 ### Reviews
 
-See [.claude/skills/pr-review/SKILL.md](.claude/skills/pr-review/SKILL.md) for voice, line-anchoring, and verdict rules.
+One inline comment per issue, anchored to the exact line. Short summary at the end. Terse maintainer voice — no em-dashes, no markdown headers in the comment body, no bold-labels.
 
 ### Issues
 
-See [.claude/skills/open-issue/SKILL.md](.claude/skills/open-issue/SKILL.md) for the audit checklist, classification table, and issue-body shapes.
+One issue per finding. Repo-correct (`optiqor-cli/` for OSS-surface bugs, `optiqor/` for backend). Title is a single declarative sentence. Body is plain prose, no `## Problem` / `## Expected Behavior` headers.
 
 ### Decisions
 

@@ -100,7 +100,7 @@ A test asserts one thing. Three behaviours = three named subtests or three `Test
 
 | Type | Where | Coverage | Example |
 |---|---|---|---|
-| **Unit** | `_test.go` next to the code, same package | Pure logic: parsers, rule engines, score math, share-URL hashing | `pkg/rules/cpu_overprovisioned_test.go` |
+| **Unit** | `_test.go` next to the code, same package | Pure logic: parsers, rule engines, score math, share-URL hashing | `pkg/rules/rules_test.go` |
 | **Golden** | `testdata/golden/*.txt` asserted via `_test.go` | Renderer output byte-stability | `internal/render/golden_test.go` |
 | **CLI invocation** | `cmd/optiqor/golden_test.go` | Whole-binary invocation through Cobra; asserts stdout/exit-code against golden | `cmd/optiqor/golden_test.go` already exists with this pattern |
 
@@ -337,7 +337,7 @@ The accuracy disclosure inside any golden file must remain byte-identical to `Ac
 
 ## Examples in this repo (read these for tone)
 
-- **Table-driven detector**: [`pkg/rules/cpu_overprovisioned_test.go`](../../../pkg/rules/cpu_overprovisioned_test.go) and friends — positive + negative + threshold-boundary in three rows.
+- **Table-driven detector**: [`pkg/rules/rules_test.go`](../../../pkg/rules/rules_test.go) and friends — positive + negative + threshold-boundary in rows.
 - **Renderer golden**: [`internal/render/text_test.go`](../../../internal/render/text_test.go) — golden assertions for plain + JSON; disclosure-presence test that loops over modes.
 - **CLI golden**: [`cmd/optiqor/golden_test.go`](../../../cmd/optiqor/golden_test.go) — full Cobra invocation, exit-code + stdout assertion.
 - **`httptest.Server` for share upload**: [`internal/share/share_test.go`](../../../internal/share/share_test.go) — fake server captures payload, asserts sanitiser stripped PII.
