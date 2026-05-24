@@ -150,7 +150,7 @@ func Run(workloads []parser.Workload, dets []Detector) []Finding {
 // detectors land in one place.
 func All() []Detector {
 	return []Detector{
-		// ---- Cost / efficiency (15) ----
+		// ---- Cost / efficiency (16) ----
 		newCPUOverprovisioned(),
 		newMemoryOverprovisioned(),
 		newCPULimitFarAboveRequest(),
@@ -166,6 +166,7 @@ func All() []Detector {
 		newMemoryRequestEqualsLimit(),
 		newTinyCPURequest(),
 		newTinyMemoryRequest(),
+		newIdleWorkload(),
 		// ---- Security (15) ----
 		newMissingCPULimit(),    // also surfaces in audit
 		newMissingMemoryLimit(), // also surfaces in audit

@@ -141,9 +141,9 @@ func TestImagePinnedLatest(t *testing.T) {
 }
 
 // TestAll_DetectorCountAndUniqueIDs guards the wire-stable detector
-// IDs and the Phase 3 count (15 cost + 15 security).
+// IDs and the running Phase 3+ count.
 func TestAll_DetectorCountAndUniqueIDs(t *testing.T) {
-	const want = 30 // 15 cost + 15 security (per Phase 3 playbook)
+	const want = 31 // 15 cost + 15 security + idle-workload (#32)
 	dets := All()
 	if len(dets) != want {
 		t.Fatalf("All() returned %d detectors, want %d", len(dets), want)
