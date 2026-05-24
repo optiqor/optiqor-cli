@@ -1,9 +1,7 @@
 // Package rules holds the deterministic detector library: cost detectors
 // (overprovisioned CPU/mem, missing limits, etc.) and security detectors.
-//
-// All detectors are pure functions over the parser's normalised
-// representation. They never call out to networks, never invoke an LLM,
-// and never produce nondeterministic output for the same input.
+// All detectors are pure functions over parser.Workload — no network, no
+// LLM, deterministic output for the same input.
 package rules
 
 import (
@@ -12,7 +10,7 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/parser"
 )
 
-// Severity captures the suggested triage urgency.
+// Severity is the suggested triage urgency for a Finding.
 type Severity string
 
 // Severity values, ordered by triage urgency.
@@ -25,7 +23,7 @@ const (
 
 // Confidence is the qualitative band the CLI emits. Numerical scores
 // land in Year 2 once enough merged PRs have been measured to calibrate
-// them — see [docs/idea.md](../../../docs/idea.md).
+// them.
 type Confidence string
 
 // Confidence band values; ranked low → high.
@@ -35,14 +33,10 @@ const (
 	ConfidenceLow  Confidence = "low"
 )
 
-// Category classifies a finding by what it actually helps the user do.
-// Optiqor's headline product is cost optimization; security findings
-// surface as a bonus side-effect of parsing Helm charts and render
-// separately so the cost signal is never drowned out.
-//
-// Category is set on every [Finding] by the engine in [Run] from the
-// owning [Detector]'s Category() method. Detectors should declare it
-// once at the type level rather than per-finding.
+// Category classifies a Finding by product surface. Cost is the
+// headline; security surfaces as a bonus side-effect of parsing Helm
+// charts and renders separately so the cost signal is never drowned out.
+// Set on every Finding by Run from the owning Detector's Category().
 type Category string
 
 // Category values. Add new categories here and to the renderer's
@@ -55,38 +49,36 @@ const (
 // Finding is a single detector output. Renderers consume a slice of
 // these; the rule engine never speaks UI.
 type Finding struct {
-	// Stable detector identifier (e.g. "cpu-overprovisioned"). Used
-	// for dismissals, suppressions, and the SaaS detector library.
+	// DetectorID is the stable identifier (e.g. "cpu-overprovisioned"),
+	// used for dismissals, suppressions, and the SaaS detector library.
 	DetectorID string
 
-	// Workload the finding refers to (its Name from parser.Workload).
+	// Workload is the parser.Workload.Name this finding refers to.
 	Workload string
 
-	// Short human-readable title for the PR comment / CLI table.
+	// Title is the short human-readable headline.
 	Title string
 
-	// Long-form explanation — surfaces in the diff narrative.
+	// Detail is the long-form explanation surfaced in the diff narrative.
 	Detail string
 
-	// Suggested cents/month savings if the finding is acted on.
-	// CLI is sandbox-grade (±40% disclosed); cluster-installed agent
-	// produces exact numbers backed by 30 days of Prometheus data.
+	// MonthlyUSDCents is the suggested cents/month savings if acted on.
+	// CLI is sandbox-grade (±40% disclosed); the agent product produces
+	// exact numbers from 30 days of Prometheus data.
 	MonthlyUSDCents int64
 
 	Severity   Severity
 	Confidence Confidence
 
-	// Category is filled by [Run] from the owning detector's
-	// [Detector.Category]. Detectors that pre-set it on their findings
-	// keep their value — useful for synthetic findings that span
-	// categories.
+	// Category is filled by Run from the owning Detector.Category().
+	// Detectors that pre-set it on their findings keep their value —
+	// useful for synthetic findings that span categories.
 	Category Category
 
-	// Signal carries the quantitative evidence for findings that have
-	// it (e.g. "request 200m vs limit 2000m"). Renderers draw a bar
-	// from this when present; nil for findings without numeric
-	// evidence (host-network, runs-as-root, etc.). Detectors that
-	// surface ratios MUST populate it — that bar is the screenshot.
+	// Signal carries quantitative evidence (e.g. "request 200m vs limit
+	// 2000m"). Renderers draw a request-vs-limit bar from it. Nil for
+	// findings without numeric evidence. Detectors that surface ratios
+	// MUST populate it — that bar is the screenshot.
 	Signal *Signal
 }
 
@@ -94,39 +86,29 @@ type Finding struct {
 // it into a request-vs-limit bar:
 //
 //	request 200m ████████████░░░░░░░░ 1 limit  (5x burst)
-//
-// Have / Want share a unit; HaveDisplay / WantDisplay are the
-// human-readable original tokens (e.g. "200m", "2Gi"). Note is
-// optional commentary the renderer prints to the right of the bar
-// (utilization headroom, burst ratio, percentile).
 type Signal struct {
-	// Label identifies the dimension being shown (e.g. "CPU",
-	// "memory", "replicas"). Renderers may align by label.
+	// Label is the dimension being shown (e.g. "CPU", "memory", "replicas").
 	Label string `json:"label"`
 
-	// Have is the smaller / current value (request, observed,
-	// floor). Want is the larger / target value (limit, recommended,
-	// ceiling). Both are in the same unit; renderers use their ratio
-	// to draw the bar.
+	// Have is the smaller / current value (request, observed, floor).
 	Have float64 `json:"have"`
+	// Want is the larger / target value (limit, recommended, ceiling).
+	// Same unit as Have; renderers draw the bar from their ratio.
 	Want float64 `json:"want"`
 
-	// Display strings preserve the chart's original tokens so users
-	// see "200m" rather than "0.2".
+	// HaveDisplay / WantDisplay preserve the chart's original tokens
+	// (e.g. "200m") so users see them instead of "0.2".
 	HaveDisplay string `json:"have_display"`
 	WantDisplay string `json:"want_display"`
 
-	// Note is short commentary printed next to the bar (e.g.
-	// "10x burst", "80% headroom"). Optional.
+	// Note is short optional commentary printed next to the bar
+	// (e.g. "10x burst", "80% headroom").
 	Note string `json:"note,omitempty"`
 }
 
-// Detector inspects a parser.Workload and returns zero or more
-// findings. Implementations must be deterministic and side-effect free.
-//
-// Category() declares which product surface the detector serves; the
-// engine stamps it onto every Finding the detector emits so renderers
-// and filters can group without inspecting detector IDs.
+// Detector inspects a parser.Workload and returns zero or more findings.
+// Implementations must be deterministic and side-effect free. Category()
+// is stamped onto every emitted Finding by Run.
 type Detector interface {
 	ID() string
 	Name() string
@@ -164,8 +146,8 @@ func Run(workloads []parser.Workload, dets []Detector) []Finding {
 }
 
 // All returns the registered Year-1 detector set. Callers should always
-// invoke this rather than constructing detectors by hand so we add new
-// detectors in one place.
+// invoke this rather than constructing detectors by hand so new
+// detectors land in one place.
 func All() []Detector {
 	return []Detector{
 		// ---- Cost / efficiency (16) ----

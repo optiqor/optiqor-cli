@@ -14,7 +14,6 @@ func (readOnlyRootFSMissing) ID() string   { return "read-only-root-fs-missing" 
 func (readOnlyRootFSMissing) Name() string { return "Root filesystem not read-only" }
 
 func (readOnlyRootFSMissing) Run(w parser.Workload) []Finding {
-	// Explicit false: HIGH confidence (intent is clear).
 	if w.Security.ReadOnlyRootFilesystem != nil && !*w.Security.ReadOnlyRootFilesystem {
 		return []Finding{{
 			DetectorID: "read-only-root-fs-missing",

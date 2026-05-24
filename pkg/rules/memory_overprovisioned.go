@@ -20,10 +20,9 @@ func (memoryOverprovisioned) Name() string { return "Memory request overprovisio
 
 const (
 	memOverprovRatio = 0.5
-	// Rough $/GiB-month at AWS RAM pricing baseline. Same caveat as CPU:
-	// the ±40% disclosure on every output is what makes the heuristic
-	// honest.
-	memPricePerGiBMonthCents = 350 // $3.50 per GiB-month (AWS m5.large baseline ratio)
+	// $3.50 per GiB-month (AWS m5.large baseline). Sandbox-only; the
+	// agent product uses the customer's actual bill.
+	memPricePerGiBMonthCents = 350
 )
 
 func (memoryOverprovisioned) Run(w parser.Workload) []Finding {

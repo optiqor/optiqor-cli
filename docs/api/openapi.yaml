@@ -1,0 +1,600 @@
+openapi: 3.1.0
+info:
+  title: Optiqor HTTP API
+  version: "1.0.0"
+  summary: Public + tenant-scoped HTTP surface of the Optiqor backend.
+  description: |
+    Mirrors the route registrations in `cmd/api/routes.go` of the
+    proprietary backend. Lives in the OSS CLI repo because the spec is
+    part of the public surface (TS client generation, third-party
+    integrations, dashboard).
+
+    Stability: `/v1/*` routes are stable; breaking changes ship under
+    `/v2/*` with a deprecation window. Unversioned routes (`/healthz`,
+    `/r/<hash>`, `/v/<id>`, `/webhooks/*`, `/oauth/*`) follow a separate
+    deprecation contract per CLAUDE.md.
+
+    Auth: Phase 2 reads tenant from `X-Optiqor-Tenant`; Phase 5 swaps
+    in the bearerAuth / sessionCookie schemes below without changing
+    route shapes.
+
+    CI gate `scripts/check-openapi-parity.sh` in the backend repo
+    enforces spec ↔ handler parity in both directions.
+  contact:
+    name: Optiqor Engineering
+    url: https://optiqor.dev
+  license:
+    name: Spec is Apache-2.0; the backend implementation is proprietary.
+    url: https://github.com/optiqor/optiqor-cli/blob/main/LICENSE
+servers:
+  - url: https://api.optiqor.dev
+    description: Production
+  - url: http://localhost:8080
+    description: Local dev (single api binary)
+
+tags:
+  - name: sandbox
+    description: Public, unauth sandbox surface. Rate-limited by IP.
+  - name: receipts
+    description: Public verification of signed Receipts.
+  - name: session
+    description: Dashboard authentication bridge.
+  - name: onboarding
+    description: Per-tenant onboarding funnel.
+  - name: apply-fix
+    description: Tenant-scoped PR remediation.
+  - name: ingest
+    description: Agent → SaaS data plane.
+  - name: cost-spikes
+    description: Bill anomaly webhooks.
+  - name: ops
+    description: Liveness, readiness, metrics, meta.
+  - name: webhooks
+    description: Inbound webhooks from external systems.
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness probe.
+      description: Always 200 on a running binary. No deps checked.
+      responses:
+        "200":
+          description: ok
+          content:
+            text/plain:
+              schema: { type: string, example: "ok\n" }
+
+  /readyz:
+    get:
+      tags: [ops]
+      summary: Readiness probe.
+      description: |
+        Runs the dependency-check registry (postgres, redis, temporal,
+        anthropic in later phases). Returns 200 only when every check
+        is healthy; 503 with a JSON breakdown otherwise.
+      responses:
+        "200": { description: ready, content: { application/json: { schema: { $ref: "#/components/schemas/ReadinessResponse" } } } }
+        "503": { description: not ready, content: { application/json: { schema: { $ref: "#/components/schemas/ReadinessResponse" } } } }
+
+  /metrics:
+    get:
+      tags: [ops]
+      summary: Prometheus exposition.
+      description: |
+        OpenMetrics-format metrics for the api binary. Naming follows
+        `optiqor_<domain>_<metric>_<unit>` per CLAUDE.md.
+      responses:
+        "200":
+          description: prometheus exposition
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /v1/meta:
+    get:
+      tags: [ops]
+      summary: Endpoint manifest for the dashboard.
+      description: Returns the list of public routes so the dashboard can route-discover without reading this spec.
+      responses:
+        "200":
+          description: manifest
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MetaResponse" }
+
+  /v1/analyze:
+    post:
+      tags: [sandbox]
+      summary: Run the deterministic detector pipeline on a Helm values document.
+      description: |
+        Body is a raw `values.yaml`. The handler parses it into normalised
+        Workload structs, runs every detector from
+        `optiqor-cli/pkg/rules.All()`, and returns findings plus a
+        sandbox-grade cost estimate. The response always carries the
+        mandatory ±40% accuracy disclosure.
+
+        Rate-limited 60 req/min/IP in Phase 2.
+      requestBody:
+        required: true
+        content:
+          text/yaml:
+            schema: { type: string }
+            example: |
+              api:
+                resources:
+                  requests: { cpu: "2", memory: "4Gi" }
+                  limits:   { cpu: "8", memory: "16Gi" }
+                replicas: 10
+      responses:
+        "200":
+          description: findings + cost estimates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalyzeResponse" }
+        "400": { description: malformed YAML / empty body }
+        "413": { description: body exceeds 1 MiB cap }
+        "429": { description: rate limited; Retry-After header in seconds }
+
+  /r/{hash}:
+    get:
+      tags: [sandbox]
+      summary: Fetch a previously shared analysis.
+      description: |
+        Default response is a styled HTML page rendered by
+        `pkg/htmlrender` (Apache-2.0) so Slack / GitHub link unfurls
+        index correctly. `?format=json` or `Accept: application/json`
+        returns the cached JSON instead.
+      parameters:
+        - in: path
+          name: hash
+          required: true
+          schema: { type: string, minLength: 1, example: "a1b2c3d4e5f6" }
+      responses:
+        "200":
+          description: share found
+          content:
+            text/html: { schema: { type: string } }
+            application/json: { schema: { $ref: "#/components/schemas/AnalyzeResponse" } }
+        "404": { description: unknown or expired hash }
+
+  /v/{id}:
+    get:
+      tags: [receipts]
+      summary: Receipt verifier page.
+      description: |
+        Self-contained HTML with live signature-status badge, canonical
+        payload, base64url signature, and offline-verify instructions.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: verifier page
+          content:
+            text/html: { schema: { type: string } }
+        "404": { description: receipt not found }
+
+  /v1/receipts/{id}:
+    get:
+      tags: [receipts]
+      summary: Fetch a Receipt JSON envelope.
+      description: |
+        Returns the canonical payload + Ed25519 signature so third-party
+        verifiers can check signatures offline against the published
+        public keys.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: receipt envelope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "404": { description: not found }
+
+  /v1/apply-fixes:
+    post:
+      tags: [apply-fix]
+      summary: Preview the Apply Fix PR body + diff.
+      description: |
+        Tenant-scoped. The composer runs the LLM under the $0.40/call
+        budget, the deterministic post-validators reject diffs that
+        violate schema or quantity bounds, and the response carries
+        both the rendered Markdown PR comment and the unified diff.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApplyFixRequest" }
+      responses:
+        "200":
+          description: preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApplyFixResponse" }
+        "400": { description: malformed input }
+        "401": { description: tenant context missing }
+        "413": { description: body exceeds 1 MiB cap }
+
+  /v1/ingest:
+    post:
+      tags: [ingest]
+      summary: Agent → SaaS metrics ingestion.
+      description: |
+        Used by the in-cluster agent to ship workload state + Prometheus
+        snapshots over mTLS. Body cap is 16 MiB to cover a medium tenant's
+        30-day snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "202": { description: accepted for async processing }
+        "401": { description: agent identity not verified }
+        "413": { description: body exceeds 16 MiB cap }
+
+  /v1/cost-spikes:
+    post:
+      tags: [cost-spikes]
+      summary: AWS Cost Anomaly Detection webhook receiver.
+      description: Tiny payload (≤ 64 KiB). The handler enqueues a CostSpike workflow that maps the bill anomaly to its most-likely-PR.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "202": { description: enqueued }
+        "400": { description: malformed payload }
+        "413": { description: body exceeds 64 KiB cap }
+
+  /v1/session/whoami:
+    get:
+      tags: [session]
+      summary: Identity + tenant context for the dashboard.
+      description: |
+        Reads (in priority order) `Authorization: Bearer <jwt>`, the
+        `optiqor_session` cookie, then the `X-Optiqor-Tenant` header.
+        Returns 401 when none yield a usable identity. The `source`
+        field tells the dashboard which path was hit.
+      security:
+        - bearerAuth: []
+        - sessionCookie: []
+        - tenantHeader: []
+      responses:
+        "200":
+          description: identity envelope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WhoamiResponse" }
+        "401": { description: no usable identity }
+
+  /v1/session/issue:
+    post:
+      tags: [session]
+      summary: Mint a backend JWT (Auth.js bridge).
+      description: |
+        Called by the dashboard after Auth.js has authenticated the
+        user via the GitHub OAuth flow. Returns the JWT in the
+        response body and sets the `optiqor_session` HttpOnly cookie.
+        The caller is responsible for validating `subject` + `tenant_id`
+        against the Auth.js session server-side; Phase 5 ties this to
+        a verified provider callback so the handler can fail closed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueRequest" }
+      responses:
+        "200":
+          description: issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssueResponse" }
+        "400": { description: missing fields / unknown fields }
+        "413": { description: body exceeds 16 KiB cap }
+
+  /v1/onboarding/state:
+    get:
+      tags: [onboarding]
+      summary: Get the tenant's onboarding state.
+      description: |
+        Tenant-scoped. Lazily creates a `signed_up` record on first read
+        so the dashboard can land on an empty tenant without a separate
+        signup event.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: onboarding envelope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingStateResponse" }
+        "401": { description: tenant context missing }
+
+  /v1/onboarding/transition:
+    post:
+      tags: [onboarding]
+      summary: Advance the onboarding state machine.
+      description: |
+        Forward-only. Backwards transitions and unknown stages return 400.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingTransitionRequest" }
+      responses:
+        "200":
+          description: updated state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingStateResponse" }
+        "400": { description: illegal transition / unknown stage }
+        "401": { description: tenant context missing }
+        "413": { description: body exceeds 4 KiB cap }
+
+  /oauth/github/callback:
+    get:
+      tags: [webhooks]
+      summary: GitHub OAuth callback receiver.
+      description: |
+        Phase 1 ack stub; Phase 5 wires the full code-exchange and hands
+        off to /v1/session/issue. The stub logs the (state, code) pair
+        and returns a deterministic JSON ack so the GitHub App's
+        redirect URI is reachable during onboarding.
+      parameters:
+        - in: query
+          name: state
+          required: false
+          schema: { type: string }
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ack
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { description: missing ?code }
+
+  /webhooks/github:
+    post:
+      tags: [webhooks]
+      summary: GitHub App webhook receiver.
+      description: |
+        HMAC-SHA256 verifies the signature against the configured webhook
+        secret. Phase 1 acks with 202; Phase 4 dispatches the event into
+        a Temporal workflow keyed off (event, delivery).
+      parameters:
+        - in: header
+          name: X-Hub-Signature-256
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-GitHub-Event
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-GitHub-Delivery
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "202": { description: enqueued (or noop in Phase 1) }
+        "400": { description: read failed }
+        "401": { description: signature verification failed }
+        "413": { description: body exceeds 8 MiB cap }
+
+components:
+  securitySchemes:
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-Optiqor-Tenant
+      description: Phase 2 dev surface. Phase 5 retires this in favour of the JWT extractor.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: HS256 JWT issued by `/v1/session/issue`.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: optiqor_session
+      description: HttpOnly cookie set by `/v1/session/issue`.
+
+  schemas:
+    ReadinessResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        version: { type: string }
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status: { type: string }
+              error: { type: string, nullable: true }
+              duration_ms: { type: integer }
+      required: [ok, checks]
+
+    MetaResponse:
+      type: object
+      properties:
+        version: { type: string }
+        endpoints:
+          type: array
+          items:
+            type: object
+            properties:
+              method: { type: string }
+              path: { type: string }
+              notes: { type: string }
+      required: [version, endpoints]
+
+    Finding:
+      type: object
+      properties:
+        DetectorID: { type: string, example: "cpu-overprovisioned" }
+        Workload: { type: string }
+        Title: { type: string }
+        Detail: { type: string }
+        MonthlyUSDCents: { type: integer, format: int64 }
+        Severity: { type: string, enum: [HIGH, MED, LOW, INFO] }
+        Confidence: { type: string, enum: [high, medium, low] }
+        Category: { type: string, enum: [cost, security] }
+      required: [DetectorID, Workload, Title, Severity, Confidence, Category]
+
+    CostEstimate:
+      type: object
+      properties:
+        workload: { type: string }
+        region: { type: string }
+        replicas: { type: integer }
+        cpu_millicores: { type: integer }
+        memory_bytes: { type: integer, format: int64 }
+        monthly_usd_cents: { type: integer, format: int64 }
+        cpu_monthly_cents: { type: integer, format: int64 }
+        mem_monthly_cents: { type: integer, format: int64 }
+        note: { type: string }
+        accuracy_band_pct: { type: integer }
+        unpriceable_field: { type: string }
+
+    AnalyzeResponse:
+      type: object
+      properties:
+        accuracy_disclosure: { type: string }
+        source: { type: string }
+        workloads_analyzed: { type: integer }
+        findings: { type: array, items: { $ref: "#/components/schemas/Finding" } }
+        cost_findings: { type: array, items: { $ref: "#/components/schemas/Finding" } }
+        security_findings_bonus: { type: array, items: { $ref: "#/components/schemas/Finding" } }
+        monthly_savings_usd: { type: number, format: double }
+        annual_savings_usd: { type: number, format: double }
+        cost_estimates: { type: array, items: { $ref: "#/components/schemas/CostEstimate" } }
+        share_hash: { type: string }
+        share_url: { type: string, format: uri }
+      required: [accuracy_disclosure, source, workloads_analyzed, findings, share_hash, share_url]
+
+    ApplyFixRequest:
+      type: object
+      properties:
+        workload: { type: string }
+        chart_yaml: { type: string }
+        finding: { $ref: "#/components/schemas/Finding" }
+      required: [workload, chart_yaml, finding]
+
+    ApplyFixResponse:
+      type: object
+      properties:
+        markdown_body: { type: string }
+        unified_diff: { type: string }
+        explanation: { type: string }
+        sanitizer_applied: { type: boolean }
+      required: [markdown_body, unified_diff]
+
+    Receipt:
+      type: object
+      properties:
+        id: { type: string }
+        tier: { type: string, enum: [cloud, capacity, hybrid] }
+        payload: { type: object, additionalProperties: true }
+        signature: { type: string, description: "base64url Ed25519 signature over the canonical payload" }
+        issuer_key_id: { type: string }
+        issued_at: { type: string, format: date-time }
+      required: [id, tier, payload, signature, issuer_key_id]
+
+    WhoamiResponse:
+      type: object
+      properties:
+        tenant_id: { type: string }
+        workspace_id: { type: string }
+        subject: { type: string }
+        name: { type: string }
+        source: { type: string, enum: [jwt, header] }
+        expires_at: { type: string, format: date-time }
+      required: [tenant_id, source]
+
+    IssueRequest:
+      type: object
+      properties:
+        subject: { type: string, description: "Auth.js stable identity (provider id or verified email)" }
+        name: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: string }
+      required: [subject, tenant_id]
+
+    IssueResponse:
+      type: object
+      properties:
+        token: { type: string, description: "Compact HS256 JWT" }
+        expires_at: { type: string, format: date-time }
+      required: [token, expires_at]
+
+    OnboardingStage:
+      type: string
+      enum:
+        - signed_up
+        - vcs_connected
+        - repo_selected
+        - first_pr_analyzed
+        - agent_installed
+        - first_apply_fix
+        - first_receipt_issued
+
+    OnboardingStateResponse:
+      type: object
+      properties:
+        current: { $ref: "#/components/schemas/OnboardingStage" }
+        reached_at:
+          type: object
+          additionalProperties: { type: string, format: date-time }
+        progress_percent: { type: integer, minimum: 0, maximum: 100 }
+        activated: { type: boolean }
+        activation_window: { type: string }
+        time_to_first_receipt:
+          type: object
+          nullable: true
+          properties:
+            seconds: { type: integer, format: int64 }
+            label: { type: string }
+        next_stage: { $ref: "#/components/schemas/OnboardingStage" }
+        slos:
+          type: object
+          properties:
+            sandbox_latency: { type: string }
+            install_to_first_pr: { type: string }
+            install_to_first_reco: { type: string }
+            install_to_first_receipt: { type: string }
+      required: [current, reached_at, progress_percent, activated, slos]
+
+    OnboardingTransitionRequest:
+      type: object
+      properties:
+        to: { $ref: "#/components/schemas/OnboardingStage" }
+      required: [to]
+      additionalProperties: false

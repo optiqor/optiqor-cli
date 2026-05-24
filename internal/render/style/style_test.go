@@ -66,7 +66,7 @@ func TestHyperlink_ColorEmitsOSC8(t *testing.T) {
 func TestDividerLine_Width(t *testing.T) {
 	th := NewTheme(false)
 	got := th.DividerLine(10)
-	// Each box-drawing char is one rune but multi-byte; count runes.
+	// Box-drawing chars are multi-byte; count runes not bytes.
 	runes := []rune(got)
 	if len(runes) != 10 {
 		t.Errorf("DividerLine(10) rune count = %d, want 10", len(runes))

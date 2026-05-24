@@ -1,4 +1,3 @@
-// Package render formats analysis results as ASCII tables, JSON, or the
-// humorous "roast" mode. Every renderer must include the ±40% accuracy
-// disclosure — see ../../CLAUDE.md.
+// Package render formats analysis results. Every renderer must
+// include the ±40% accuracy disclosure (CLAUDE.md hard rule).
 package render

@@ -20,7 +20,6 @@ func (missingMemoryLimit) Name() string { return "Missing memory limit" }
 
 func (missingMemoryLimit) Run(w parser.Workload) []Finding {
 	if !w.Requests.Memory.Set {
-		// No request set either — separate finding will catch fully-unset workloads in a future detector.
 		return nil
 	}
 	if w.Limits.Memory.Set {

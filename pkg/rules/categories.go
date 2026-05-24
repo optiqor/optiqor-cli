@@ -1,15 +1,8 @@
 package rules
 
-// Detector → Category bindings live here so the classification is
-// auditable in one place. Adding a new detector requires:
-//
-//  1. Implementing the Detector interface in its own file.
-//  2. Registering it in [All].
-//  3. Adding its Category() method below.
-//
-// The build will fail if step 3 is skipped because [Detector] requires
-// Category(); that is intentional — every finding must declare which
-// product surface it serves.
+// Detector → Category bindings live in one place so classification is
+// auditable. The Detector interface requires Category(); the build
+// fails if a new detector forgets to declare it.
 
 // ---- Cost / efficiency ------------------------------------------------
 

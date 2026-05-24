@@ -1,31 +1,16 @@
 // Package htmlrender produces a single self-contained HTML document
-// from a set of [rules.Finding]s.
+// from a set of rules.Finding.
 //
-// The same package is consumed by two callers:
+// Single source of truth: consumed by both the CLI's `optiqor analyze
+// --html report.html` and the Optiqor backend's share-page handlers, so
+// the local file and the share page are guaranteed to match byte-for-byte.
 //
-//  1. The CLI's `optiqor analyze --html report.html` command, which
-//     writes the rendered bytes to disk for offline viewing.
-//  2. The Optiqor backend's `GET /r/<hash>` and `GET /v/<id>` Go
-//     handlers, which stream the same bytes over HTTP.
-//
-// Because both paths share the rendering, the local file and the
-// share page are guaranteed to match byte-for-byte — there is no
-// second renderer the backend can diverge into.
-//
-// Design constraints:
-//
-//   - Apache-2.0 (this whole package is auditable OSS).
-//   - Zero JS dependencies. CSS is inlined; the only optional script
-//     handles the "Copy share URL" button and is gracefully disabled
-//     when the URL is empty.
-//   - Mandatory ±40% accuracy disclosure on every output (CLI hard
-//     rule). The string is exposed as [AccuracyDisclosure] so both
-//     callers reuse the exact bytes.
+// Constraints:
+//   - Apache-2.0 (auditable OSS).
+//   - Zero JS dependencies; CSS is inlined.
+//   - Mandatory ±40% accuracy disclosure (CLI hard rule) — exposed as
+//     AccuracyDisclosure so both callers reuse the exact bytes.
 //   - Deterministic output for a given input (golden-testable).
-//
-// The visual language is the "Editorial × Engineering" axis defined
-// in optiqor-cli/brand/tokens.json — dark base, monospace data
-// emphasis, hairline borders, no gradient text, no drop shadows.
 package htmlrender
 
 import (
@@ -44,40 +29,36 @@ import (
 // package never drifts from the line every other renderer ships.
 const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
-// Mode discriminates the accuracy banner. Sandbox is the default
-// (CLI + public sandbox); Agent is the paid in-cluster path.
+// Mode discriminates the accuracy banner.
 type Mode int
 
 const (
-	// ModeSandbox renders the public, ±40%-accuracy sandbox banner used by
-	// the CLI and the optiqor.com share preview.
+	// ModeSandbox renders the public ±40% sandbox banner (CLI + share preview).
 	ModeSandbox Mode = iota
-	// ModeAgent renders the exact-accuracy banner used by the paid
-	// in-cluster agent path.
+	// ModeAgent renders the exact-accuracy banner for the paid in-cluster path.
 	ModeAgent
 )
 
-// Data is the public input. Build one of these on the call site;
-// htmlrender does NOT depend on the CLI's [internal/render.Report]
-// because internal/ would block backend imports.
+// Data is the renderer input. htmlrender deliberately does NOT depend
+// on the CLI's internal/render.Report because internal/ would block
+// backend imports.
 type Data struct {
 	// Source is the human-readable label for what was analysed
-	// (path, share-hash, "demo", etc.). Rendered in the header.
+	// (path, share-hash, "demo", etc.).
 	Source string
 	// Workloads is the workload count the parser produced.
 	Workloads int
-	// Findings is the full set the renderer splits into cost-first
+	// Findings is the full set, split by the renderer into cost-first
 	// and security-bonus.
 	Findings []rules.Finding
-	// ShareURL, when non-empty, renders a copy-link button. Leave
-	// empty for the CLI's --html flag (no upload happened).
+	// ShareURL, when non-empty, renders a copy-link button.
 	ShareURL string
-	// GeneratedAt is stamped into the footer. Truncated to the
-	// minute so re-renders within a minute are byte-equal.
+	// GeneratedAt is stamped into the footer. Truncated to the minute
+	// so re-renders within a minute are byte-equal.
 	GeneratedAt time.Time
 	// Mode controls which accuracy line renders.
 	Mode Mode
-	// PageTitle overrides the default <title>. Leave empty to use
+	// PageTitle overrides the default <title>. Empty uses
 	// "Optiqor analysis — <Source>".
 	PageTitle string
 }
@@ -98,8 +79,8 @@ func Render(w io.Writer, d Data) error {
 	return nil
 }
 
-// RenderString is a convenience wrapper for callers that want a
-// string rather than streaming to an [io.Writer].
+// RenderString is a convenience wrapper for callers that want a string
+// rather than streaming to an io.Writer.
 func RenderString(d Data) (string, error) {
 	var buf bytes.Buffer
 	if err := Render(&buf, d); err != nil {
@@ -108,8 +89,6 @@ func RenderString(d Data) (string, error) {
 	return buf.String(), nil
 }
 
-// view is the template-facing struct. Keep it small — the template
-// must remain readable in code review.
 type view struct {
 	Title              string
 	Source             string
@@ -128,21 +107,21 @@ type view struct {
 }
 
 type totalsView struct {
-	MonthlyUSD string
-	AnnualUSD  string
-	HasSavings bool
+	MonthlyUSD     string
+	AnnualUSD      string
+	HasSavings     bool
 	WorkloadsLabel string
 }
 
 type findingView struct {
-	Severity     string
-	SeverityCls  string
-	Workload     string
-	Title        string
-	Detail       string
-	HasSavings   bool
-	SavingsUSD   string
-	Confidence   string
+	Severity      string
+	SeverityCls   string
+	Workload      string
+	Title         string
+	Detail        string
+	HasSavings    bool
+	SavingsUSD    string
+	Confidence    string
 	ConfidenceCls string
 }
 
@@ -183,8 +162,6 @@ func buildView(d Data) view {
 	return v
 }
 
-// Helpers ─────────────────────────────────────────────────────────
-
 func split(in []rules.Finding) (cost, sec []rules.Finding) {
 	cost = make([]rules.Finding, 0, len(in))
 	sec = make([]rules.Finding, 0, len(in))
@@ -219,12 +196,12 @@ func sortCost(in []rules.Finding) []rules.Finding {
 
 func toView(f rules.Finding) findingView {
 	v := findingView{
-		Severity:    string(f.Severity),
-		SeverityCls: "sev-" + strings.ToLower(string(f.Severity)),
-		Workload:    f.Workload,
-		Title:       f.Title,
-		Detail:      f.Detail,
-		Confidence:  string(f.Confidence),
+		Severity:      string(f.Severity),
+		SeverityCls:   "sev-" + strings.ToLower(string(f.Severity)),
+		Workload:      f.Workload,
+		Title:         f.Title,
+		Detail:        f.Detail,
+		Confidence:    string(f.Confidence),
 		ConfidenceCls: "conf-" + strings.ToLower(string(f.Confidence)),
 	}
 	if f.MonthlyUSDCents > 0 {
@@ -312,7 +289,5 @@ func withCommas(n int64) string {
 	}
 	return b.String()
 }
-
-// Template -----------------------------------------------------------
 
 var tmpl = template.Must(template.New("htmlrender").Parse(documentTemplate))

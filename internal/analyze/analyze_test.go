@@ -7,8 +7,17 @@ import (
 	"testing"
 )
 
-func TestRun_ReturnsFindings(t *testing.T) {
-	in := strings.NewReader(`
+func TestRun(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		yaml          string
+		wantErr       bool
+		wantWorkloads int
+		mustSeeIDs    []string
+	}{
+		{
+			name: "two-workloads-fire-cpu-and-missing-limit",
+			yaml: `
 api:
   resources:
     requests:
@@ -21,45 +30,50 @@ worker:
   resources:
     requests:
       memory: "1Gi"
-`)
-	rep, err := Run(in, Options{Source: "test"})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if rep.Workloads != 2 {
-		t.Errorf("workloads = %d, want 2", rep.Workloads)
-	}
-	if len(rep.Findings) == 0 {
-		t.Fatal("expected findings, got 0")
-	}
-
-	var sawCPU, sawMissingLimit bool
-	for _, f := range rep.Findings {
-		switch f.DetectorID {
-		case "cpu-overprovisioned":
-			sawCPU = true
-		case "missing-memory-limit":
-			sawMissingLimit = true
-		}
-	}
-	if !sawCPU {
-		t.Error("missing cpu-overprovisioned finding")
-	}
-	if !sawMissingLimit {
-		t.Error("missing missing-memory-limit finding")
+`,
+			wantWorkloads: 2,
+			mustSeeIDs:    []string{"cpu-overprovisioned", "missing-memory-limit"},
+		},
+		{
+			name:    "malformed-yaml-errors",
+			yaml:    "not: valid: yaml::",
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rep, err := Run(strings.NewReader(tc.yaml), Options{Source: "test"})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if rep.Workloads != tc.wantWorkloads {
+				t.Errorf("workloads = %d, want %d", rep.Workloads, tc.wantWorkloads)
+			}
+			if len(rep.Findings) == 0 {
+				t.Fatal("expected findings, got 0")
+			}
+			seen := map[string]bool{}
+			for _, f := range rep.Findings {
+				seen[f.DetectorID] = true
+			}
+			for _, id := range tc.mustSeeIDs {
+				if !seen[id] {
+					t.Errorf("missing detector %q in findings", id)
+				}
+			}
+		})
 	}
 }
 
-func TestRun_BadYAML(t *testing.T) {
-	if _, err := Run(strings.NewReader("not: valid: yaml::"), Options{}); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRunPath_File(t *testing.T) {
+func TestRunPath(t *testing.T) {
 	dir := t.TempDir()
-	values := filepath.Join(dir, "values.yaml")
-	if err := os.WriteFile(values, []byte(`
+	fileValues := filepath.Join(dir, "file-values.yaml")
+	if err := os.WriteFile(fileValues, []byte(`
 api:
   resources:
     requests:
@@ -72,34 +86,53 @@ api:
 		t.Fatal(err)
 	}
 
-	rep, err := RunPath(values)
-	if err != nil {
-		t.Fatalf("RunPath: %v", err)
-	}
-	if rep.Workloads != 1 {
-		t.Errorf("workloads = %d, want 1", rep.Workloads)
-	}
-}
-
-func TestRunPath_Directory(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(`api: {resources: {requests: {cpu: 1, memory: 1Gi}, limits: {cpu: 1, memory: 1Gi}}}`), 0o600); err != nil {
+	dirChart := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dirChart, "values.yaml"),
+		[]byte(`api: {resources: {requests: {cpu: 1, memory: 1Gi}, limits: {cpu: 1, memory: 1Gi}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rep, err := RunPath(dir)
-	if err != nil {
-		t.Fatalf("RunPath dir: %v", err)
-	}
-	if rep.Workloads != 1 {
-		t.Errorf("workloads = %d", rep.Workloads)
-	}
-	if !strings.HasSuffix(rep.Source, "values.yaml") {
-		t.Errorf("source should point to values.yaml, got %q", rep.Source)
-	}
-}
 
-func TestRunPath_Missing(t *testing.T) {
-	if _, err := RunPath("/nonexistent/path/values.yaml"); err == nil {
-		t.Fatal("expected error")
+	for _, tc := range []struct {
+		name          string
+		path          string
+		wantErr       bool
+		wantWorkloads int
+		wantSrcSuffix string
+	}{
+		{
+			name:          "file-path-loads-directly",
+			path:          fileValues,
+			wantWorkloads: 1,
+		},
+		{
+			name:          "directory-resolves-to-values-yaml",
+			path:          dirChart,
+			wantWorkloads: 1,
+			wantSrcSuffix: "values.yaml",
+		},
+		{
+			name:    "missing-path-errors",
+			path:    "/nonexistent/path/values.yaml",
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rep, err := RunPath(tc.path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("RunPath: %v", err)
+			}
+			if rep.Workloads != tc.wantWorkloads {
+				t.Errorf("workloads = %d, want %d", rep.Workloads, tc.wantWorkloads)
+			}
+			if tc.wantSrcSuffix != "" && !strings.HasSuffix(rep.Source, tc.wantSrcSuffix) {
+				t.Errorf("source = %q, want suffix %q", rep.Source, tc.wantSrcSuffix)
+			}
+		})
 	}
 }

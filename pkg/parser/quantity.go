@@ -1,9 +1,3 @@
-// Package parser reads Helm values + templates and Kustomize overlays
-// into a normalised in-memory representation that the rule engine
-// consumes.
-//
-// Phase 1 supports flat values.yaml structures (`<workload>.resources.{requests,limits}.{cpu,memory}`).
-// Sub-chart and template parsing land in Phase 2.
 package parser
 
 import (
@@ -13,9 +7,8 @@ import (
 	"strings"
 )
 
-// Quantity is a parsed Kubernetes resource scalar.
-//
-// CPU is stored as millicores (1 CPU == 1000 milli-CPU); memory as bytes.
+// Quantity is a parsed Kubernetes resource scalar. CPU is stored as
+// millicores (1 CPU == 1000 milli-CPU); memory as bytes.
 type Quantity struct {
 	Value    int64  // canonical units (millicores for CPU, bytes for memory)
 	Set      bool   // whether the source actually had a value

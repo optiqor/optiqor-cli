@@ -3,119 +3,132 @@ package parser
 import "testing"
 
 func TestParseCPU(t *testing.T) {
-	cases := []struct {
+	for _, tc := range []struct {
+		name    string
 		in      string
 		want    int64
 		set     bool
 		wantErr bool
 	}{
-		{"", 0, false, false},
-		{"500m", 500, true, false},
-		{"1", 1000, true, false},
-		{"2.5", 2500, true, false},
-		{"0", 0, true, false},
-		{"-1", 0, false, true},
-		{"100x", 0, false, true},
-		{"abc", 0, false, true},
-	}
-	for _, tc := range cases {
-		q, err := ParseCPU(tc.in)
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("ParseCPU(%q): expected error", tc.in)
+		{name: "empty-yields-unset", in: "", want: 0, set: false},
+		{name: "millicore-suffix", in: "500m", want: 500, set: true},
+		{name: "whole-core", in: "1", want: 1000, set: true},
+		{name: "fractional-core", in: "2.5", want: 2500, set: true},
+		{name: "zero-is-set", in: "0", want: 0, set: true},
+		{name: "negative-errors", in: "-1", wantErr: true},
+		{name: "trailing-junk-errors", in: "100x", wantErr: true},
+		{name: "non-numeric-errors", in: "abc", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := ParseCPU(tc.in)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("ParseCPU(%q): expected error", tc.in)
+				}
+				return
 			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("ParseCPU(%q): unexpected error: %v", tc.in, err)
-			continue
-		}
-		if q.Value != tc.want || q.Set != tc.set {
-			t.Errorf("ParseCPU(%q) = {%d %v}, want {%d %v}", tc.in, q.Value, q.Set, tc.want, tc.set)
-		}
+			if err != nil {
+				t.Fatalf("ParseCPU(%q): unexpected error: %v", tc.in, err)
+			}
+			if q.Value != tc.want || q.Set != tc.set {
+				t.Errorf("ParseCPU(%q) = {%d %v}, want {%d %v}", tc.in, q.Value, q.Set, tc.want, tc.set)
+			}
+		})
 	}
 }
 
 func TestParseMemory(t *testing.T) {
-	cases := []struct {
+	for _, tc := range []struct {
+		name    string
 		in      string
 		want    int64
 		set     bool
 		wantErr bool
 	}{
-		{"", 0, false, false},
-		{"1024", 1024, true, false},
-		{"1Ki", 1024, true, false},
-		{"1Mi", 1024 * 1024, true, false},
-		{"512Mi", 512 * 1024 * 1024, true, false},
-		{"2Gi", 2 * 1024 * 1024 * 1024, true, false},
-		{"1G", 1_000_000_000, true, false},
-		{"100M", 100_000_000, true, false},
-		{"-1Mi", 0, false, true},
-		{"abcMi", 0, false, true},
-	}
-	for _, tc := range cases {
-		q, err := ParseMemory(tc.in)
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("ParseMemory(%q): expected error", tc.in)
+		{name: "empty-yields-unset", in: "", want: 0, set: false},
+		{name: "plain-bytes", in: "1024", want: 1024, set: true},
+		{name: "Ki-binary", in: "1Ki", want: 1024, set: true},
+		{name: "Mi-binary", in: "1Mi", want: 1024 * 1024, set: true},
+		{name: "512Mi", in: "512Mi", want: 512 * 1024 * 1024, set: true},
+		{name: "Gi-binary", in: "2Gi", want: 2 * 1024 * 1024 * 1024, set: true},
+		{name: "G-decimal", in: "1G", want: 1_000_000_000, set: true},
+		{name: "M-decimal", in: "100M", want: 100_000_000, set: true},
+		{name: "negative-errors", in: "-1Mi", wantErr: true},
+		{name: "non-numeric-errors", in: "abcMi", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := ParseMemory(tc.in)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("ParseMemory(%q): expected error", tc.in)
+				}
+				return
 			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("ParseMemory(%q): unexpected error: %v", tc.in, err)
-			continue
-		}
-		if q.Value != tc.want || q.Set != tc.set {
-			t.Errorf("ParseMemory(%q) = {%d %v}, want {%d %v}", tc.in, q.Value, q.Set, tc.want, tc.set)
-		}
+			if err != nil {
+				t.Fatalf("ParseMemory(%q): unexpected error: %v", tc.in, err)
+			}
+			if q.Value != tc.want || q.Set != tc.set {
+				t.Errorf("ParseMemory(%q) = {%d %v}, want {%d %v}", tc.in, q.Value, q.Set, tc.want, tc.set)
+			}
+		})
 	}
 }
 
 func TestFormatCPU(t *testing.T) {
-	cases := map[int64]string{
-		0:    "0",
-		500:  "500m",
-		1000: "1",
-		1500: "1500m",
-		2000: "2",
-	}
-	for in, want := range cases {
-		got := FormatCPU(Quantity{Value: in, Set: true})
-		if got != want {
-			t.Errorf("FormatCPU(%d) = %q, want %q", in, got, want)
-		}
-	}
-	if got := FormatCPU(Quantity{}); got != "(unset)" {
-		t.Errorf("FormatCPU(unset) = %q", got)
+	for _, tc := range []struct {
+		name string
+		in   Quantity
+		want string
+	}{
+		{name: "zero", in: Quantity{Value: 0, Set: true}, want: "0"},
+		{name: "sub-core-millis", in: Quantity{Value: 500, Set: true}, want: "500m"},
+		{name: "whole-core", in: Quantity{Value: 1000, Set: true}, want: "1"},
+		{name: "fractional-stays-millis", in: Quantity{Value: 1500, Set: true}, want: "1500m"},
+		{name: "two-cores", in: Quantity{Value: 2000, Set: true}, want: "2"},
+		{name: "unset-sentinel", in: Quantity{}, want: "(unset)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := FormatCPU(tc.in); got != tc.want {
+				t.Errorf("FormatCPU(%+v) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
 func TestFormatMemory(t *testing.T) {
-	cases := []struct {
+	for _, tc := range []struct {
+		name string
 		v    int64
 		want string
 	}{
-		{0, "0B"},
-		{1024, "1.0Ki"},
-		{1024 * 1024, "1.0Mi"},
-		{2 * 1024 * 1024 * 1024, "2.0Gi"},
-		{1024 * 1024 * 1024 * 1024, "1.0Ti"},
-	}
-	for _, tc := range cases {
-		got := FormatMemory(Quantity{Value: tc.v, Set: true})
-		if got != tc.want {
-			t.Errorf("FormatMemory(%d) = %q, want %q", tc.v, got, tc.want)
-		}
+		{name: "zero-bytes", v: 0, want: "0B"},
+		{name: "one-Ki", v: 1024, want: "1.0Ki"},
+		{name: "one-Mi", v: 1024 * 1024, want: "1.0Mi"},
+		{name: "two-Gi", v: 2 * 1024 * 1024 * 1024, want: "2.0Gi"},
+		{name: "one-Ti", v: 1024 * 1024 * 1024 * 1024, want: "1.0Ti"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatMemory(Quantity{Value: tc.v, Set: true})
+			if got != tc.want {
+				t.Errorf("FormatMemory(%d) = %q, want %q", tc.v, got, tc.want)
+			}
+		})
 	}
 }
 
 func TestQuantityString(t *testing.T) {
-	q := Quantity{Original: "500m", Set: true}
-	if q.String() != "500m" {
-		t.Errorf("String() = %q", q.String())
-	}
-	if (Quantity{}).String() != "(unset)" {
-		t.Error("unset String() should be (unset)")
+	for _, tc := range []struct {
+		name string
+		in   Quantity
+		want string
+	}{
+		{name: "set-returns-original", in: Quantity{Original: "500m", Set: true}, want: "500m"},
+		{name: "unset-returns-sentinel", in: Quantity{}, want: "(unset)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.in.String(); got != tc.want {
+				t.Errorf("String() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
