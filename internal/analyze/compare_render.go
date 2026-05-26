@@ -24,13 +24,13 @@ func (r CompareReport) WriteText(w io.Writer, opts render.Options) error {
 
 	var b strings.Builder
 
-	// ── Header ────────────────────────────────────────────────────────
+	//  Header
 	fmt.Fprintf(&b, "%s\n", t.DividerLine(width))
 	label := fmt.Sprintf("compare: %s  vs  %s", shortPath(r.A), shortPath(r.B))
 	fmt.Fprintf(&b, "%s\n", t.SectionRule(label, width, t.SectionPrimary))
 	fmt.Fprintf(&b, "%s\n\n", t.DividerLine(width))
 
-	// ── Cost summary ──────────────────────────────────────────────────
+	//  Cost summary
 	aLabel := t.Workload.Render(shortPath(r.A))
 	bLabel := t.Workload.Render(shortPath(r.B))
 
@@ -41,7 +41,7 @@ func (r CompareReport) WriteText(w io.Writer, opts render.Options) error {
 	fmt.Fprintf(&b, "    %s  %s\n", t.Muted.Render("A:"), t.BigSavings.Render("$"+formatCents(r.CostA)+"/mo"))
 	fmt.Fprintf(&b, "    %s  %s\n\n", t.Muted.Render("B:"), t.BigSavings.Render("$"+formatCents(r.CostB)+"/mo"))
 
-	// ── Winner ────────────────────────────────────────────────────────
+	//  Winner
 	switch r.Winner {
 	case "a":
 		savings := r.CostB - r.CostA
@@ -61,28 +61,28 @@ func (r CompareReport) WriteText(w io.Writer, opts render.Options) error {
 		fmt.Fprintf(&b, "  %s\n\n", t.Muted.Render("✓ Tie — identical cost and HIGH findings"))
 	}
 
-	// ── Findings only in A ────────────────────────────────────────────
+	//  Findings only in A
 	writeCompareSection(&b, t, width,
 		fmt.Sprintf("Findings only in A (%d)", len(r.OnlyInA)),
 		r.OnlyInA,
 		t.SectionPrimary,
 	)
 
-	// ── Findings only in B ────────────────────────────────────────────
+	//  Findings only in B
 	writeCompareSection(&b, t, width,
 		fmt.Sprintf("Findings only in B (%d)", len(r.OnlyInB)),
 		r.OnlyInB,
 		t.SectionBonus,
 	)
 
-	// ── Findings in both ──────────────────────────────────────────────
+	//  Findings in both
 	writeCompareSection(&b, t, width,
 		fmt.Sprintf("Findings in both (%d)", len(r.InBoth)),
 		r.InBoth,
 		t.SectionSubtle,
 	)
 
-	// ── Footer ────────────────────────────────────────────────────────
+	//  Footer
 	fmt.Fprintf(&b, "%s\n", t.DividerLine(width))
 	fmt.Fprintf(&b, "  %s\n", t.Disclosure.Render(render.AccuracyDisclosure))
 
