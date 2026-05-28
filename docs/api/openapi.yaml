@@ -412,6 +412,35 @@ paths:
         "401": { description: tenant context missing }
         "413": { description: body exceeds 4 KiB cap }
 
+  /v1/onboarding/preflight:
+    post:
+      tags: [onboarding]
+      summary: Cluster pre-flight checks before `helm install`.
+      description: |
+        Runs the K8s version + Prometheus reachability + RBAC + provisioner
+        detection + namespace count checks against the candidate cluster.
+        Returns a list of Check rows the install-wizard renders as a
+        preview "this is what Optiqor will do" page. Phase 5 reduces
+        support load 5-10x by surfacing the misconfiguration before the
+        operator runs `helm install`.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: preflight check list
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: tenant context missing }
+        "413": { description: body exceeds 4 KiB cap }
+
   /oauth/github/callback:
     get:
       tags: [webhooks]
