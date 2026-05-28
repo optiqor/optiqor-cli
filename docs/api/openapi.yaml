@@ -244,6 +244,68 @@ paths:
         "401": { description: agent identity not verified }
         "413": { description: body exceeds 16 MiB cap }
 
+  /v1/agent/snapshot:
+    post:
+      tags: [ingest]
+      summary: Agent → SaaS rich cluster snapshot (Phase 5).
+      description: |
+        Authenticated by the agent's mTLS client cert (SPIFFE URI SAN of
+        the form `spiffe://optiqor.dev/tenant/<uuid>`) PLUS a 15-min HS256
+        JWT in the `X-Optiqor-Agent-Token` header. The JWT proves
+        recency — a leaked cert pair has bounded blast radius. Body
+        carries K8s inventory + Prom samples + service graph +
+        provisioner detection in one round-trip.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "202": { description: snapshot accepted; echoes batch_id + obs counts }
+        "400": { description: malformed snapshot or cluster mismatch }
+        "401": { description: mTLS or token verification failed }
+        "413": { description: body exceeds 16 MiB cap }
+
+  /v1/agent/health:
+    get:
+      tags: [dashboard]
+      summary: Agent status + last check-in (Phase 5).
+      description: |
+        Tenant-scoped. Reads the freshest row from the agents table and
+        projects status (healthy / degraded / offline), last check-in
+        timestamp, and data freshness window.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: agent health envelope
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: tenant context missing }
+
+  /v1/savings/summary:
+    get:
+      tags: [dashboard]
+      summary: Lifetime / MTD / YTD savings (Phase 5).
+      description: |
+        Tenant-scoped. Sums monthly_usd_cents from merged apply_fixes
+        per period. Cents are returned to stay precision-stable across
+        JSON rounds.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: savings summary envelope
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: tenant context missing }
+
   /v1/cost-spikes:
     post:
       tags: [cost-spikes]
