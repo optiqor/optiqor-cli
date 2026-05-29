@@ -603,7 +603,7 @@
         "want": 8000,
         "have_display": "2",
         "want_display": "8",
-        "note": "limit \u003e 4 vCPU"
+        "note": "limit /u003e 4 vCPU"
       }
     },
     {
@@ -621,7 +621,7 @@
         "want": 34359738368,
         "have_display": "8Gi",
         "want_display": "32Gi",
-        "note": "limit \u003e 16 GiB"
+        "note": "limit /u003e 16 GiB"
       }
     },
     {
@@ -1301,7 +1301,7 @@
         "want": 8000,
         "have_display": "2",
         "want_display": "8",
-        "note": "limit \u003e 4 vCPU"
+        "note": "limit /u003e 4 vCPU"
       }
     },
     {
@@ -1319,7 +1319,7 @@
         "want": 34359738368,
         "have_display": "8Gi",
         "want_display": "32Gi",
-        "note": "limit \u003e 16 GiB"
+        "note": "limit /u003e 16 GiB"
       }
     },
     {

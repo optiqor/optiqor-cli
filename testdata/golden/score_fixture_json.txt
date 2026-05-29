@@ -2,7 +2,7 @@
   "accuracy_disclosure": "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get).",
   "score_report": {
     "workloads_analyzed": 15,
-    "source": "C:\\Users\\ABHINAV\\optiqor-cli\\testdata\\fixtures\\basic-chart\\values.yaml",
+    "source": "<REPO>/testdata/fixtures/basic-chart/values.yaml",
     "score": 0,
     "confidence_band": "low",
     "grade": {
@@ -643,7 +643,7 @@
           "want": 8000,
           "have_display": "2",
           "want_display": "8",
-          "note": "limit \u003e 4 vCPU"
+          "note": "limit /u003e 4 vCPU"
         }
       },
       {
@@ -661,7 +661,7 @@
           "want": 34359738368,
           "have_display": "8Gi",
           "want_display": "32Gi",
-          "note": "limit \u003e 16 GiB"
+          "note": "limit /u003e 16 GiB"
         }
       },
       {
