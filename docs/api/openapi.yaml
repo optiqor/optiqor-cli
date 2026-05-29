@@ -412,6 +412,28 @@ paths:
         "401": { description: tenant context missing }
         "413": { description: body exceeds 4 KiB cap }
 
+  /v1/onboarding/health:
+    get:
+      tags: [onboarding]
+      summary: Per-tenant onboarding funnel position plus actionable blockers.
+      description: |
+        Shareable with the customer. Returns the current Stage + reached
+        timestamps + a `blockers[]` list of next actions, plus surface
+        hints (agent online, GitHub App installed, Prometheus reachable)
+        the CSM team and the in-app banner consume to nudge the right
+        step. PR #41.
+      security:
+        - tenantHeader: []
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: onboarding health envelope
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: tenant context missing }
+
   /v1/onboarding/preflight:
     post:
       tags: [onboarding]
